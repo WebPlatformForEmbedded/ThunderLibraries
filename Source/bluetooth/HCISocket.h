@@ -646,7 +646,6 @@ namespace Bluetooth {
                     _offset += result;
 
                     CMD_DUMP("HCI sent", stream, result);
-                    // printf(_T("HCI command: %X:%03X\n"), cmd_opcode_ogf(OPCODE), cmd_opcode_ocf(OPCODE));
                 }
                 return (result);
             }
@@ -677,7 +676,6 @@ namespace Bluetooth {
                     if (hdr->evt == EVT_CMD_STATUS) {
                         const evt_cmd_status* cs = reinterpret_cast<const evt_cmd_status*>(ptr);
                         if (btohs(cs->opcode) == OPCODE) {
-                            // printf(_T("HCI command status: %X:%03X Status=%d\n"), cmd_opcode_ogf(cs->opcode), cmd_opcode_ocf(cs->opcode), cs->status);
 
                             if (cs->status == 0) {
                                 // See if we are waiting for an event...
@@ -693,7 +691,6 @@ namespace Bluetooth {
                     } else if (hdr->evt == EVT_CMD_COMPLETE) {
                         const evt_cmd_complete* cc = reinterpret_cast<const evt_cmd_complete*>(ptr);
                         if (btohs(cc->opcode) == OPCODE) {
-                            // printf(_T("HCI command complete: %X:%03X %s\n"), cmd_opcode_ogf(cc->opcode), cmd_opcode_ocf(cc->opcode), len <= EVT_CMD_COMPLETE_SIZE? "FAILURE" : "");
 
                             if (len <= EVT_CMD_COMPLETE_SIZE) {
                                 _error = ~0;
