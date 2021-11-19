@@ -282,7 +282,7 @@ static constexpr conversion_entry _tableRollOff[] = {
             uint16_t Events() override {
                 return (POLLPRI);
             }
-            void Handle(const uint16_t events) override {
+            void Handle(const uint16_t events VARIABLE_IS_NOT_USED) override {
                if (LoadHeader() == true) {
                     int loaded = ::read(_mux, &(_buffer[_offset]), (_length - (_offset - 3)));
                     if (loaded < 0) {
@@ -657,7 +657,7 @@ static constexpr conversion_entry _tableRollOff[] = {
 
         // In case the tuner needs to be tuned to a specific programId, please list it here. Once the PID's associated to this
         // programId have been found, and set, the Tuner will reach its PREPARED state.
-        virtual uint32_t Prepare(const uint16_t programId) override
+        virtual uint32_t Prepare(const uint16_t programId VARIABLE_IS_NOT_USED) override
         {
             TRACE_L1("%s:%d %s", __FILE__, __LINE__, __FUNCTION__);
             return 0;
@@ -699,12 +699,12 @@ static constexpr conversion_entry _tableRollOff[] = {
             return (result); 
         } 
         // Using the next two methods, the frontends will be hooked up to decoders or file, and be removed from a decoder or file.
-        virtual uint32_t Attach(const uint8_t index) override
+        virtual uint32_t Attach(const uint8_t index VARIABLE_IS_NOT_USED) override
         {
             TRACE_L1("%s:%d %s\n", __FILE__, __LINE__, __FUNCTION__);
             return 0;
         }
-        virtual uint32_t Detach(const uint8_t index) override
+        virtual uint32_t Detach(const uint8_t index VARIABLE_IS_NOT_USED) override
         {
             TRACE_L1("%s:%d %s\n", __FILE__, __LINE__, __FUNCTION__);
             return 0;

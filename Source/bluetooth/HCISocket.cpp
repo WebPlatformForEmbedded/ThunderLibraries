@@ -219,7 +219,7 @@ void HCISocket::Discovery(const bool enable)
     _state.Unlock();
 }
 
-uint32_t HCISocket::ReadStoredLinkKeys(const Address adr, const bool all, LinkKeys& list)
+uint32_t HCISocket::ReadStoredLinkKeys(const Address adr, const bool all, LinkKeys& list VARIABLE_IS_NOT_USED)
 {
     Command::ReadStoredLinkKey parameters;
 
@@ -331,19 +331,19 @@ template<> void HCISocket::DeserializeScanResponse<le_advertising_info>(const ui
 {
 }
 
-/* virtual */ void HCISocket::Update(const inquiry_info& eventData)
+/* virtual */ void HCISocket::Update(const inquiry_info&)
 {
 }
 
-/* virtual */ void HCISocket::Update(const inquiry_info_with_rssi& eventData)
+/* virtual */ void HCISocket::Update(const inquiry_info_with_rssi&)
 {
 }
 
-/* virtual */ void HCISocket::Update(const extended_inquiry_info& eventData)
+/* virtual */ void HCISocket::Update(const extended_inquiry_info&)
 {
 }
 
-/* virtual */ void HCISocket::Update(const le_advertising_info& eventData)
+/* virtual */ void HCISocket::Update(const le_advertising_info&)
 {
 }
 

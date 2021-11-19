@@ -270,12 +270,12 @@ namespace Bluetooth {
                 TRACE_L1("DataRecord: Truncated payload");
             }
         }
-        virtual void PushIntegerValue(const uint16_t value)
+        virtual void PushIntegerValue(const uint16_t value VARIABLE_IS_NOT_USED)
         {
             ASSERT(false && "Push uint16_t not supported on no-endian DataRecord");
             _writerOffset += 2;
         }
-        virtual void PushIntegerValue(const uint32_t value)
+        virtual void PushIntegerValue(const uint32_t value VARIABLE_IS_NOT_USED)
         {
             ASSERT(false && "Push uint32_t not supported on no-endian DataRecord");
             _writerOffset += 4;

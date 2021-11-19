@@ -997,7 +997,7 @@ namespace SDP {
             }
         }
 
-        uint16_t Deserialize(const uint8_t stream[], const uint16_t length) override
+        uint16_t Deserialize(const uint8_t stream[] VARIABLE_IS_NOT_USED, const uint16_t length VARIABLE_IS_NOT_USED) override
         {
             TRACE_L1("Not expecting SDP requests on this socket!");
             return (0);

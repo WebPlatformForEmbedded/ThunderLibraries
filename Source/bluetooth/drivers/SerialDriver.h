@@ -452,7 +452,7 @@ namespace Bluetooth {
         {
             _port.Flush();
         }
-        virtual void Received(const Exchange::Request& element)
+        virtual void Received(const Exchange::Request& element VARIABLE_IS_NOT_USED)
         {
         }
 
