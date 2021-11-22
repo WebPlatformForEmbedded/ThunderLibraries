@@ -33,3 +33,4 @@ workspace/
 /artifacts/Release
 *.pyc
 cmake_install.cmake
+Source/broadcast/test/BroadcastTester
