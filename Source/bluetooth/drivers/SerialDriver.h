@@ -383,7 +383,7 @@ namespace Bluetooth {
             if (_port.Open(100) == Core::ERROR_NONE) {
 
                 ToTerminal();
-                _port.Link().Configuration(Convert(baudRate), flowControl, 64, 64);
+                _port.Link().Configuration(SerialPort::Convert(baudRate), flowControl);
                 _port.Flush();
 
                 if (sendBreak == true) {
@@ -436,7 +436,7 @@ namespace Bluetooth {
             if (_port.Open(100) == Core::ERROR_NONE) {
 
                 ToTerminal();
-                _port.Link().Configuration(Convert(baudRate), _flowControl, 64, 64);
+                _port.Link().Configuration(SerialPort::Convert(baudRate), _flowControl);
                 _port.Flush();
             }
             else {
@@ -464,62 +464,6 @@ namespace Bluetooth {
             if (::ioctl(static_cast<Core::IResource&>(_port.Link()).Descriptor(), TIOCSETD, &ttyValue) < 0) {
                 printf("Failed direct IOCTL to TIOCSETD, %d\n", errno);
             }
-        }
-        Core::SerialPort::BaudRate Convert(const uint32_t baudRate)
-        {
-            if (baudRate <= 110)
-                return (Core::SerialPort::BAUDRATE_110);
-            if (baudRate <= 300)
-                return (Core::SerialPort::BAUDRATE_300);
-            if (baudRate <= 600)
-                return (Core::SerialPort::BAUDRATE_600);
-            if (baudRate <= 1200)
-                return (Core::SerialPort::BAUDRATE_1200);
-            if (baudRate <= 2400)
-                return (Core::SerialPort::BAUDRATE_2400);
-            if (baudRate <= 4800)
-                return (Core::SerialPort::BAUDRATE_4800);
-            if (baudRate <= 9600)
-                return (Core::SerialPort::BAUDRATE_9600);
-            if (baudRate <= 19200)
-                return (Core::SerialPort::BAUDRATE_19200);
-            if (baudRate <= 38400)
-                return (Core::SerialPort::BAUDRATE_38400);
-            if (baudRate <= 57600)
-                return (Core::SerialPort::BAUDRATE_57600);
-            if (baudRate <= 115200)
-                return (Core::SerialPort::BAUDRATE_115200);
-            if (baudRate <= 230400)
-                return (Core::SerialPort::BAUDRATE_230400);
-            if (baudRate <= 460800)
-                return (Core::SerialPort::BAUDRATE_460800);
-            if (baudRate <= 500000)
-                return (Core::SerialPort::BAUDRATE_500000);
-            if (baudRate <= 576000)
-                return (Core::SerialPort::BAUDRATE_576000);
-            if (baudRate <= 921600)
-                return (Core::SerialPort::BAUDRATE_921600);
-            if (baudRate <= 1000000)
-                return (Core::SerialPort::BAUDRATE_1000000);
-            if (baudRate <= 1152000)
-                return (Core::SerialPort::BAUDRATE_1152000);
-            if (baudRate <= 1500000)
-                return (Core::SerialPort::BAUDRATE_1500000);
-            if (baudRate <= 2000000)
-                return (Core::SerialPort::BAUDRATE_2000000);
-            if (baudRate <= 2500000)
-                return (Core::SerialPort::BAUDRATE_2500000);
-            if (baudRate <= 3000000)
-                return (Core::SerialPort::BAUDRATE_3000000);
-            if (baudRate <= 3500000)
-                return (Core::SerialPort::BAUDRATE_3500000);
-#ifdef B3710000
-            if (baudRate <= 3710000)
-                return (Core::SerialPort::BAUDRATE_3710000);
-#endif
-            if (baudRate <= 4000000)
-                return (Core::SerialPort::BAUDRATE_4000000);
-            return (Core::SerialPort::BAUDRATE_9600);
         }
 
     private:
