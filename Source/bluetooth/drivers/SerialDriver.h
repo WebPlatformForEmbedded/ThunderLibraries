@@ -383,7 +383,7 @@ namespace Bluetooth {
             if (_port.Open(100) == Core::ERROR_NONE) {
 
                 ToTerminal();
-                _port.Link().Configuration(SerialPort::Convert(baudRate), flowControl);
+                _port.Link().Configuration(Core::SerialPort::Convert(baudRate), flowControl);
                 _port.Flush();
 
                 if (sendBreak == true) {
@@ -436,7 +436,7 @@ namespace Bluetooth {
             if (_port.Open(100) == Core::ERROR_NONE) {
 
                 ToTerminal();
-                _port.Link().Configuration(SerialPort::Convert(baudRate), _flowControl);
+                _port.Link().Configuration(Core::SerialPort::Convert(baudRate), _flowControl);
                 _port.Flush();
             }
             else {
@@ -445,7 +445,7 @@ namespace Bluetooth {
         }
         void SetBaudRate(const uint32_t baudRate)
         {
-            _port.Link().SetBaudRate(Convert(baudRate));
+            _port.Link().SetBaudRate(Core::SerialPort::Convert(baudRate));
             _port.Flush();
         }
         void Flush() 
