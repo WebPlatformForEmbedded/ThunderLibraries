@@ -129,9 +129,11 @@ void HCISocket::Scan(const uint16_t scanTime, const bool limited, const bool pas
     if ((_state & ACTION_MASK) == 0) {
         Command::ScanParametersLE parameters;
         parameters.Clear();
+        const uint16_t window = (limited? 0x12 : 0x10 /* 10ms */);
+        // Make sure window is smaller than interval, so the link layer has time for other Bluetooth operations during scanning.
         parameters->type = (passive? SCAN_TYPE_PASSIVE : SCAN_TYPE_ACTIVE);
-        parameters->interval = htobs((limited ? 0x12 : 0x10));
-        parameters->window = htobs((limited ? 0x12 : 0x10));
+        parameters->window = htobs(window);
+        parameters->interval = htobs(passive? (8 * window) : (4 * window));
         parameters->own_bdaddr_type = LE_PUBLIC_ADDRESS;
         parameters->filter = SCAN_FILTER_POLICY_ALL;
 
@@ -189,9 +191,11 @@ void HCISocket::Discovery(const bool enable)
         if (enable == true) {
             Command::ScanParametersLE parameters;
             parameters.Clear();
+            const uint16_t window = 0x10; // 10ms
             parameters->type = SCAN_TYPE_PASSIVE;
-            parameters->interval = htobs(0x12);
-            parameters->window = htobs(0x12);
+            // Make sure window is smaller than interval, so the link layer has time for other Bluetooth operations during scanning.
+            parameters->interval = htobs(8 * window);
+            parameters->window = htobs(window);
             parameters->own_bdaddr_type = LE_PUBLIC_ADDRESS;
             parameters->filter = SCAN_FILTER_POLICY_ALL;
 
