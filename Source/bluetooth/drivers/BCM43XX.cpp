@@ -100,10 +100,10 @@ namespace Bluetooth {
                }
             }
             else if (config.SerialAsMAC.Value() == true) {
-                const uint8_t* rawId = Core::SystemInfo::Instance().RawDeviceId();
-                max = std::min(rawId[0], static_cast<uint8_t>(sizeof(_MACAddress)));
+                const uint8_t* mac = GetDeviceMAC();
+                max = std::min(mac[0], static_cast<uint8_t>(sizeof(_MACAddress)));
                 for (uint8_t index = 1; index <= max; index++) {
-                    _MACAddress[max - index] = rawId[index];
+                    _MACAddress[max - index] = mac[index];
                 }
             }
 
@@ -346,12 +346,28 @@ namespace Bluetooth {
 
             return (result);
         }
+        const uint8_t* GetDeviceMAC() const
+        {
+            static uint8_t MACAddressBuffer[Core::AdapterIterator::MacSize];
+
+            memset(MACAddressBuffer, 0, Core::AdapterIterator::MacSize);
+
+            Core::AdapterIterator adapters;
+            while ((adapters.Next() == true)) {
+                if (adapters.HasMAC() == true) {
+                    adapters.MACAddress(MACAddressBuffer, Core::AdapterIterator::MacSize);
+                    break;
+                }
+            }
+
+            return MACAddressBuffer;
+	}
 
     private:
         const string _directory;
         string _name;
         uint8_t _MACLength;
-        uint8_t _MACAddress[6];
+        uint8_t _MACAddress[Core::AdapterIterator::MacSize];
         uint32_t _setupRate;
         uint32_t _baudRate;
     };
