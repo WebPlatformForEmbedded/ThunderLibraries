@@ -143,22 +143,22 @@ namespace SDP {
         }
         void Push(use_descriptor_t, const Payload& sequence, const bool alternative = false)
         {
+            PushDescriptor((alternative? ALT : SEQ), sequence.Length());
             if (sequence.Length() != 0) {
-                PushDescriptor((alternative? ALT : SEQ), sequence.Length());
                 Push(sequence);
             }
         }
         void Push(use_length_t, const Payload& sequence, const bool = false)
         {
-            Push(sequence.Length()); // opposite to use_descriptor, here do store the zero length
+            Push(sequence.Length());
             if (sequence.Length() != 0) {
                 Push(sequence);
             }
         }
         void Push(use_descriptor_t, const Buffer& sequence, const bool alternative = false)
         {
+            PushDescriptor((alternative? ALT : SEQ), sequence.size());
             if (sequence.size() != 0) {
-                PushDescriptor((alternative? ALT : SEQ), sequence.size());
                 Push(sequence);
             }
         }
@@ -323,7 +323,8 @@ namespace SDP {
                     if (size == 2) {
                         uuid = Bluetooth::UUID((_buffer[_readerOffset] << 8) | _buffer[_readerOffset + 1]);
                     } else if (size == 4) {
-                        ASSERT(false && "SDP: 32-bit UUID not supported\n");
+                        uuid = Bluetooth::UUID((_buffer[_readerOffset] << 24) | (_buffer[_readerOffset + 1] << 16)
+                                                | (_buffer[_readerOffset + 2] << 8) | _buffer[_readerOffset + 3]);
                     } else {
                         uint8_t buffer[size];
                         uint8_t i = size;
