@@ -1214,6 +1214,7 @@ namespace Bluetooth {
         uint32_t Discoverable(const bool enabled);
         uint32_t Advertising(bool enabled);
         uint32_t SimplePairing(bool enabled);
+        uint32_t HighSpeed(bool enabled);
         uint32_t LowEnergy(bool enabled);
         uint32_t SecureLink(bool enabled);
         uint32_t SecureConnection(bool enabled);
