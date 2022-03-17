@@ -597,7 +597,7 @@ namespace Bluetooth {
             }
         }
 
-        uint16_t Deserialize(const uint8_t dataFrame[], const uint16_t availableData) override
+        uint16_t Deserialize(const uint8_t dataFrame[] VARIABLE_IS_NOT_USED, const uint16_t availableData) override
         {
             uint32_t result = 0;
 
