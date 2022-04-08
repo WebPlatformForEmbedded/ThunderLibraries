@@ -113,8 +113,9 @@ int BtUtilsHciDevba(int dev_id, bdaddr_t* bdaddr)
 
 int BtUtilsOtherBdaddr(int dd, int dev_id, long arg)
 {
+PUSH_WARNING(DISABLE_WARNING_MISSING_FIELD_INITIALIZERS)
 	struct hci_dev_info di = { .dev_id = static_cast<uint16_t>(dev_id) };
-
+POP_WARNING()
 	if (ioctl(dd, HCIGETDEVINFO, (void*)&di))
 		return 0;
 
@@ -126,7 +127,9 @@ int BtUtilsOtherBdaddr(int dd, int dev_id, long arg)
 
 int BtUtilsSameBdaddr(int dd, int dev_id, long arg)
 {
+PUSH_WARNING(DISABLE_WARNING_MISSING_FIELD_INITIALIZERS)
 	struct hci_dev_info di = { .dev_id = static_cast<uint16_t>(dev_id) };
+POP_WARNING()
 
 	if (ioctl(dd, HCIGETDEVINFO, (void*)&di))
 		return 0;
