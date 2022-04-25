@@ -201,7 +201,7 @@ namespace Bluetooth {
             {
                _mtu = ((_mtu & 0xFFFF) | 0xFF000000);
             }
-            virtual uint16_t Serialize(uint8_t stream[], const uint16_t length) const override
+            virtual uint16_t Serialize(uint8_t stream[], const uint16_t length VARIABLE_IS_NOT_USED) const override
             {
                 uint16_t result = 0;
                 if ((_mtu >> 24) == 0xFF) {
