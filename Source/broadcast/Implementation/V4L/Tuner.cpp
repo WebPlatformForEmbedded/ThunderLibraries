@@ -234,7 +234,7 @@ static constexpr conversion_entry _tableRollOff[] = {
 
                 char deviceName[32];
 
-                strncpy (deviceName, path.c_str(), sizeof(deviceName));
+                strncpy (deviceName, path.c_str(), std::min(path.size(), sizeof(deviceName)));
               
                 ::snprintf(&(deviceName[path.length()]), (sizeof(deviceName) - path.length()), "demux%d", index);
 
@@ -469,6 +469,7 @@ static constexpr conversion_entry _tableRollOff[] = {
         };
 
     private:
+PUSH_WARNING(DISABLE_WARNING_MISSING_FIELD_INITIALIZERS)
         Tuner(uint8_t index, Broadcast::transmission transmission = Broadcast::TRANSMISSION_AUTO, Broadcast::guard guard = Broadcast::GUARD_AUTO, Broadcast::hierarchy hierarchy = Broadcast::AutoHierarchy)
             : _state(IDLE)
             , _frontend()
@@ -480,6 +481,7 @@ static constexpr conversion_entry _tableRollOff[] = {
             , _frontindex(0)
             , _callback(nullptr)
         {
+POP_WARNING()
             _callback = TunerAdministrator::Instance().Announce(this);
             if (Tuner::Information::Instance().Type() != SYS_UNDEFINED) {
                 char deviceName[32];
