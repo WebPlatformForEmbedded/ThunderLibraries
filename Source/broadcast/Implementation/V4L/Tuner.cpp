@@ -232,11 +232,15 @@ static constexpr conversion_entry _tableRollOff[] = {
                 , _buffer(reinterpret_cast<uint8_t*>(::malloc(_size)))
                 , _callback(callback) {
 
-                char deviceName[32];
+                static constexpr TCHAR MuxSuffix[] = _T("demux");
 
-                strncpy (deviceName, path.c_str(), std::min(path.size(), sizeof(deviceName)));
-              
-                ::snprintf(&(deviceName[path.length()]), (sizeof(deviceName) - path.length()), "demux%d", index);
+                char deviceName[50];
+                char strIndex[4];
+
+                ::snprintf(strIndex, sizeof(strIndex), "%d", index);
+                ASSERT(sizeof(deviceName) > (path.size() + strlen(MuxSuffix) + strlen(strIndex)));
+
+                ::snprintf(deviceName, sizeof(deviceName), "%s%s%s", path.c_str(), MuxSuffix, strIndex);
 
                 _mux = open(deviceName, O_RDWR|O_NONBLOCK);
 
