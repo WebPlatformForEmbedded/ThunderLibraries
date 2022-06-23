@@ -232,11 +232,15 @@ static constexpr conversion_entry _tableRollOff[] = {
                 , _buffer(reinterpret_cast<uint8_t*>(::malloc(_size)))
                 , _callback(callback) {
 
-                char deviceName[32];
+                static constexpr TCHAR MuxSuffix[] = _T("demux");
 
-                strncpy (deviceName, path.c_str(), sizeof(deviceName));
-              
-                ::snprintf(&(deviceName[path.length()]), (sizeof(deviceName) - path.length()), "demux%d", index);
+                char deviceName[50];
+                char strIndex[4];
+
+                ::snprintf(strIndex, sizeof(strIndex), "%d", index);
+                ASSERT(sizeof(deviceName) > (path.size() + strlen(MuxSuffix) + strlen(strIndex)));
+
+                ::snprintf(deviceName, sizeof(deviceName), "%s%s%s", path.c_str(), MuxSuffix, strIndex);
 
                 _mux = open(deviceName, O_RDWR|O_NONBLOCK);
 
@@ -469,6 +473,7 @@ static constexpr conversion_entry _tableRollOff[] = {
         };
 
     private:
+PUSH_WARNING(DISABLE_WARNING_MISSING_FIELD_INITIALIZERS)
         Tuner(uint8_t index, Broadcast::transmission transmission = Broadcast::TRANSMISSION_AUTO, Broadcast::guard guard = Broadcast::GUARD_AUTO, Broadcast::hierarchy hierarchy = Broadcast::AutoHierarchy)
             : _state(IDLE)
             , _frontend()
@@ -480,6 +485,7 @@ static constexpr conversion_entry _tableRollOff[] = {
             , _frontindex(0)
             , _callback(nullptr)
         {
+POP_WARNING()
             _callback = TunerAdministrator::Instance().Announce(this);
             if (Tuner::Information::Instance().Type() != SYS_UNDEFINED) {
                 char deviceName[32];
