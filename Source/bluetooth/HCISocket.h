@@ -367,7 +367,11 @@ namespace Bluetooth {
             ::memcpy(&(_key.val), value, sizeof(_key.val));
             _key.addr.type = address_type;
             _key.type = type;
+#ifdef NO_INCLUSIVE_LANGUAGE
+            _key.central = master;
+#else
             _key.master = master;
+#endif
             _key.enc_size = encryptionSize;
             _key.ediv = htobs(diversifier); // 16 bits
             _key.rand = htobll(random); // 64 bits
@@ -408,7 +412,11 @@ namespace Bluetooth {
             return (_key.addr.type);
         }
         uint8_t Master() const {
+#ifdef NO_INCLUSIVE_LANGUAGE
+            return(_key.central);
+#else
             return(_key.master);
+#endif
         }
         uint8_t Authenticated() const {
             return(_key.type);
