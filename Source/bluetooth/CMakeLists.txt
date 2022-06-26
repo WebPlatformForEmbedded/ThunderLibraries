@@ -29,7 +29,7 @@ message("Setup ${TARGET} v${PROJECT_VERSION}")
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
 
 
-find_package(Bluez REQUIRED)
+find_package(Bluez5UtilHeaders REQUIRED)
 find_package(BCM_HOST QUIET)
 find_package(NEXUS QUIET)
 
@@ -74,6 +74,7 @@ target_link_libraries(${TARGET}
           CompileSettingsDebug::CompileSettingsDebug
           ${NAMESPACE}Core::${NAMESPACE}Core
           ${NAMESPACE}Tracing::${NAMESPACE}Tracing
+          Bluez5UtilHeaders::Bluez5UtilHeaders
         )
 
 
@@ -93,7 +94,6 @@ target_include_directories( ${TARGET}
           $<INSTALL_INTERFACE:include/${NAMESPACE}>
         PRIVATE
           "${CMAKE_CURRENT_SOURCE_DIR}/drivers"
-          ${BLUEZ_INCLUDE_DIRS}
         )
 
 #
