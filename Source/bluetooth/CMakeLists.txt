@@ -29,7 +29,7 @@ message("Setup ${TARGET} v${PROJECT_VERSION}")
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
 
 
-find_package(Bluez REQUIRED)
+find_package(Bluez5UtilHeaders REQUIRED)
 find_package(BCM_HOST QUIET)
 find_package(NEXUS QUIET)
 
@@ -74,6 +74,7 @@ target_link_libraries(${TARGET}
           CompileSettingsDebug::CompileSettingsDebug
           ${NAMESPACE}Core::${NAMESPACE}Core
           ${NAMESPACE}Tracing::${NAMESPACE}Tracing
+          Bluez5UtilHeaders::Bluez5UtilHeaders
         )
 
 
@@ -93,8 +94,19 @@ target_include_directories( ${TARGET}
           $<INSTALL_INTERFACE:include/${NAMESPACE}>
         PRIVATE
           "${CMAKE_CURRENT_SOURCE_DIR}/drivers"
-          ${BLUEZ_INCLUDE_DIRS}
         )
+
+#
+# From Bluez >= v5.64 the mgmt_ltk_info struct is changed due to inclusive language changes.
+# https://github.com/bluez/bluez/commit/b7d6a7d25628e9b521a29a5c133fcadcedeb2102
+#
+include(CheckStructHasMember)
+check_struct_has_member("struct mgmt_ltk_info" central "../include/bluetooth/bluetooth.h;../include/bluetooth/mgmt.h" NO_INCLUSIVE_LANGUAGE LANGUAGE C)
+        
+if(${NO_INCLUSIVE_LANGUAGE})
+  message(STATUS "Your version of bluez don't uses inclusive language anymore")
+  target_compile_definitions(${TARGET} PUBLIC NO_INCLUSIVE_LANGUAGE)
+endif()
 
 install(
         TARGETS ${TARGET}  EXPORT ${TARGET}Targets  # for downstream dependencies

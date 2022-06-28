@@ -33,14 +33,14 @@ namespace Bluetooth {
         UUID() {
             _uuid[0] = 0;
         }
-        UUID(const uint16_t uuid)
+        UUID(const uint32_t uuid)
         {
-            _uuid[0] = 2;
+            _uuid[0] = (uuid < 0x10000? 2 : 16);
             ::memcpy(&(_uuid[1]), BASE, sizeof(_uuid) - 5);
             _uuid[13] = (uuid & 0xFF);
             _uuid[14] = (uuid >> 8) & 0xFF;
-            _uuid[15] = 0;
-            _uuid[16] = 0;
+            _uuid[15] = (uuid >> 16) & 0xFF;
+            _uuid[16] = (uuid >> 24) & 0xFF;
         }
         explicit UUID(const uint8_t uuid[16])
         {
