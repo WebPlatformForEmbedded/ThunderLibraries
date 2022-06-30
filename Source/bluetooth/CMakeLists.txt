@@ -28,10 +28,15 @@ set(TARGET ${PROJECT_NAME})
 message("Setup ${TARGET} v${PROJECT_VERSION}")
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
 
+option(BCM43XX "Select the serial driver for bluetooth modules found on RaspberryPi's" OFF)
 
 find_package(Bluez5UtilHeaders REQUIRED)
 find_package(BCM_HOST QUIET)
 find_package(NEXUS QUIET)
+
+if (BCM_HOST_FOUND)
+  set(BCM43XX ON) 
+endif()
 
 add_library(${TARGET} SHARED
         HCISocket.cpp
@@ -63,7 +68,7 @@ set(PUBLIC_HEADERS
         bluetooth.h
         )
 
-if (BCM_HOST_FOUND)
+if (BCM43XX)
     target_sources(${TARGET} PRIVATE drivers/BCM43XX.cpp)
 else ()
     target_sources(${TARGET} PRIVATE drivers/Basic.cpp)
