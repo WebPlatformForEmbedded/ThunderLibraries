@@ -1137,10 +1137,10 @@ namespace SDP {
             _response.SerializeErrorResponse(error);
             Reply(_response);
         }
-        void OnServiceSearch(const uint16_t transactionId, const std::list<UUID>& serviceUuids, const uint16_t maxResults)
+        void OnServiceSearch(const uint16_t transactionId, const std::list<UUID>& uuids, const uint16_t maxResults)
         {
             _response.NextTransaction(transactionId);
-            _response.SerializeServiceSearchResponse(serviceUuids, maxResults);
+            _response.SerializeServiceSearchResponse(uuids, maxResults);
             Reply(_response);
         }
         void OnServiceAttribute(const uint16_t transactionId, const uint32_t serviceHandle, uint16_t maxBytes, const std::list<uint32_t>& attributeRanges)
@@ -1149,10 +1149,10 @@ namespace SDP {
             _response.SerializeServiceAttributeResponse(serviceHandle, maxBytes, attributeRanges);
             Reply(_response);
         }
-        void OnServiceSearchAttribute(const uint16_t transactionId, const std::list<UUID>& serviceUuids, uint16_t maxBytes, const std::list<uint32_t>& attributeRanges)
+        void OnServiceSearchAttribute(const uint16_t transactionId, const std::list<UUID>& uuids, uint16_t maxBytes, const std::list<uint32_t>& attributeRanges)
         {
             _response.NextTransaction(transactionId);
-            _response.SerializeServiceSearchAttributeResponse(serviceUuids, maxBytes, attributeRanges);
+            _response.SerializeServiceSearchAttributeResponse(uuids, maxBytes, attributeRanges);
             Reply(_response);
         }
         void Reply(Response& response)

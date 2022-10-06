@@ -293,6 +293,9 @@ namespace SDP {
                 const Payload parameters((stream + header.Length()), payloadLength);
 
                 switch(_type) {
+                case PDU::ServiceSearchRequest:
+                    _status = DeserializeServiceSearchRequest(parameters);
+                    break;
                 case PDU::ServiceSearchAttributeRequest:
                     _status = DeserializeServiceSearchAttributeRequest(parameters);
                     break;
@@ -311,12 +314,57 @@ namespace SDP {
         return (result);
     }
 
+    ServerSocket::PDU::errorid SDP::ServerSocket::Request::DeserializeServiceSearchRequest(const Payload& params)
+    {
+        // ServiceSearchRequest frame format:
+        // - ServiceSearchPattern (sequence of UUIDs)
+        // - MaximumServiceRecordCount (word)
+        // - ContinuationState
+
+        PDU::errorid result = PDU::InvalidRequestSyntax;
+
+        if (params.Length() >= 2) {
+            std::list<UUID> services;
+            uint16_t maxServiceCount;
+
+            params.Pop(use_descriptor, [&](const Payload& sequence) {
+                while (sequence.Available() > 0) {
+                    UUID uuid;
+                    sequence.Pop(use_descriptor, uuid);
+                    services.push_back(uuid);
+                }
+            });
+
+            params.Pop(maxServiceCount); // no descriptor!
+
+            Payload::Continuation cont;
+            params.Pop(cont, _continuationData);
+            if (cont != Payload::Continuation::ABSENT) {
+                // TODO: Add continuation support to the server.
+                ASSERT(false && "Unexpected Continuation data as not supported in SDP server");
+                result = PDU::InvalidContinuationState;
+            } else {
+                result = PDU::Success;
+                _server.OnServiceSearch(_transactionId, services, maxServiceCount);
+            }
+        } else {
+            TRACE_L1("Truncated payload in ServiceAttributeResponse [%d]", params.Length());
+        }
+
+        if (result != PDU::Success) {
+            _server.OnError(_transactionId, result);
+        }
+
+        return (result);
+    }
+
     ServerSocket::PDU::errorid SDP::ServerSocket::Request::DeserializeServiceSearchAttributeRequest(const Payload& params)
     {
         // ServiceSearchAttributeRequest frame format:
         // - ServiceSearchPattern (sequence of UUIDs)
         // - MaximumAttributeByteCount (word)
         // - AttributeIDList (sequence of UUID ranges or UUIDs)
+        // - ContinuationState
 
         PDU::errorid result = PDU::InvalidRequestSyntax;
 
@@ -357,9 +405,8 @@ namespace SDP {
                 result = PDU::InvalidContinuationState;
             } else {
                 result = PDU::Success;
+                _server.OnServiceSearchAttribute(_transactionId, services, maxByteCount, attributeRanges);
             }
-
-            _server.OnServiceSearchAttribute(_transactionId, services, maxByteCount, attributeRanges);
         } else {
             TRACE_L1("Truncated payload in ServiceAttributeResponse [%d]", params.Length());
         }
@@ -385,17 +432,43 @@ namespace SDP {
         _pdu.Construct(PDU::ErrorResponse, payload);
     }
 
-    void ServerSocket::Response::SerializeServiceSearchResponse(const std::list<UUID>& /* serviceUuids */, const uint16_t /* maxResults */ )
+    void ServerSocket::Response::SerializeServiceSearchResponse(const std::list<UUID>& uuids, const uint16_t maxResults)
     {
-        // TODO?
-        TRACE_L1("SDP ServiceSearechResponse not supported");
-        SerializeErrorResponse(PDU::UnsupportedSdpVersion);
+        // ServiceSearchAttribute frame format:
+        // - TotalServiceRecordCount,
+        // - CurrentServiceRecordCount,
+        // - ServiceRecordHandleList,
+        // - ContinuationState
+
+        uint8_t scratchPad[1024];
+        Payload payload(scratchPad, sizeof(scratchPad), 0);
+
+        std::list<uint32_t> handles;
+        for (const UUID& uuid : uuids) {
+            std::list<uint32_t> serviceHandles;
+            _server.Services(uuid, serviceHandles);
+            handles.splice(handles.end(), serviceHandles);
+        }
+
+        const uint16_t totalResults = handles.size();
+        const uint16_t results = std::min(totalResults, maxResults);
+        payload.Push(totalResults);
+        payload.Push(results);
+
+        auto it = handles.cbegin();
+        for (uint16_t i = 0; i < results; i++) {
+            payload.Push((*it++));
+        }
+
+        // In practice no continuation information - this response is always complete.
+        _pdu.Construct(PDU::ServiceSearchAttributeResponse, payload);
     }
 
     void ServerSocket::Response::SerializeServiceAttributeResponse(const uint32_t /* serviceHandle */ , const uint16_t /* maxBytes */,  const std::list<uint32_t>& /* attributeRanges */)
     {
         // TODO?
         TRACE_L1("SDP ServiceAttributeResponse not supported");
+        SerializeErrorResponse(PDU::UnsupportedSdpVersion);
     }
 
     void ServerSocket::Response::SerializeServiceSearchAttributeResponse(const std::list<UUID>& uuids, uint16_t maxBytes, const std::list<uint32_t>& attributeRanges)

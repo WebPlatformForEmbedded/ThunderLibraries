@@ -33,6 +33,9 @@ namespace Bluetooth {
 
 namespace SDP {
 
+    static constexpr uint16_t CHARSET_US_ASCII = 3;
+    static constexpr uint16_t CHARSET_UTF8 = 106;
+
     class EXTERNAL ClassID {
     public:
         enum id : uint16_t {
@@ -229,6 +232,39 @@ namespace SDP {
                 DocumentationURL                = 0x000a,
                 ClientExecutableURL             = 0x000b,
                 IconURL                         = 0x000c,
+            };
+
+            static constexpr uint16_t ServiceNameOffset        = 0;
+            static constexpr uint16_t ServiceDescriptionOffset = 1;
+            static constexpr uint16_t ProviderNameOffset       = 2;
+
+            // specific to Advanced Audio Distribution
+            enum class a2dp : uint16_t {
+                SupportedFeatures               = 0x0311
+            };
+
+            // specfic to AVRemoteControl profile
+            enum class avcrp : uint16_t {
+                SupportedFeatures               = 0x0311
+            };
+
+            // specific to Basic Imaging profile
+            enum class bip : uint16_t  {
+                GoepL2capPsm                    = 0x0200,
+                SupportedCapabilities           = 0x0300,
+                SupportedFeatures               = 0x0311,
+                SupportedFunctions              = 0x0312,
+                TotalImagingDataCapacity        = 0x0313
+            };
+
+            // specific to PnPInformation profile
+            enum class did : uint16_t {
+                SpecificationID                 = 0x0200,
+                VendorID                        = 0x0201,
+                ProductID                       = 0x0202,
+                Version                         = 0x0203,
+                PrimaryRecord                   = 0x0204,
+                VendorIDSource                  = 0x0205
             };
 
         public:
@@ -550,9 +586,6 @@ namespace SDP {
                 static constexpr auto type = AttributeDescriptor::LanguageBaseAttributeIDList;
 
             public:
-                static constexpr uint16_t CHARSET_US_ASCII = 3;
-                static constexpr uint16_t CHARSET_UTF8 = 106;
-
                 class Triplet {
                 public:
                     Triplet() = delete;
@@ -797,7 +830,8 @@ namespace SDP {
         Service& operator=(const Service&) = delete;
 
         Service(const uint32_t handle)
-            : _serviceRecordHandle(nullptr)
+            : _enabled(false)
+            , _serviceRecordHandle(nullptr)
             , _serviceClassIDList(nullptr)
             , _protocolDescriptorList(nullptr)
             , _browseGroupList(nullptr)
@@ -859,6 +893,12 @@ namespace SDP {
         {
             return (ProfileDescriptorList() == nullptr? 0 : ProfileDescriptorList()->Profile(id));
         }
+        template<typename TYPE, /* if id is enum */ typename std::enable_if<std::is_enum<TYPE>::value, int>::type = 0>
+        const Buffer* Attribute(const TYPE id) const
+        {
+            // enum class is not implicitly convertible to its underlying type
+            return (Attribute(static_cast<uint16_t>(id)));
+        }
         const Buffer* Attribute(const uint16_t id) const
         {
             auto const& it = std::find_if(_attributes.cbegin(), _attributes.cend(), [&](const AttributeDescriptor& attr) { return (attr.Id() == id); });
@@ -866,26 +906,50 @@ namespace SDP {
         }
         bool Search(const UUID& id) const
         {
-            return ((HasClassID(id) == true) || (IsInBrowseGroup(id) == true) || (Protocol(id) != nullptr) || (Profile(id) != 0));
+            return ((IsEnabled() == true) && ((HasClassID(id) == true) || (IsInBrowseGroup(id) == true) || (Protocol(id) != nullptr) || (Profile(id) != 0)));
         }
-        bool Metadata(const string& language, const uint16_t charset, string& name, string& description, string& provider) const
+        string Name() const
+        {
+            string name;
+
+            if (LanguageBaseAttributeIDList() != nullptr) {
+                uint16_t lb = LanguageBaseAttributeIDList()->LanguageBase("en", CHARSET_US_ASCII);
+                if (lb != 0) {
+                    const Buffer* buffer = Attribute(lb + AttributeDescriptor::ServiceNameOffset);
+                    if (buffer != nullptr) {
+                        name = Data::Element<std::string>(*buffer).Value();
+                    }
+                } else {
+                    lb = LanguageBaseAttributeIDList()->LanguageBase("en", CHARSET_UTF8);
+                    if (lb != 0) {
+                        const Buffer* buffer = Attribute(lb + AttributeDescriptor::ServiceNameOffset);
+                        if (buffer != nullptr) {
+                            name = Data::Element<std::string>(*buffer).Value();
+                        }
+                    }
+                }
+            }
+
+            return (name);
+        }
+        bool Metadata(string& name, string& description, string& provider, const string& language = _T("en"), const uint16_t charset = CHARSET_US_ASCII) const
         {
             bool result = false;
 
             if (LanguageBaseAttributeIDList() != nullptr) {
                 uint16_t lb = LanguageBaseAttributeIDList()->LanguageBase(language, charset);
                 if (lb != 0) {
-                    const Buffer* buffer = Attribute(lb);
+                    const Buffer* buffer = Attribute(lb + AttributeDescriptor::ServiceNameOffset);
                     if (buffer != nullptr) {
                         name = Data::Element<std::string>(*buffer).Value();
                     }
 
-                    buffer = Attribute(lb + 1);
+                    buffer = Attribute(lb + AttributeDescriptor::ServiceDescriptionOffset);
                     if (buffer != nullptr) {
                         description = Data::Element<std::string>(*buffer).Value();
                     }
 
-                    buffer = Attribute(lb + 2);
+                    buffer = Attribute(lb + AttributeDescriptor::ProviderNameOffset);
                     if (buffer != nullptr) {
                         provider = Data::Element<std::string>(*buffer).Value();
                     }
@@ -898,6 +962,14 @@ namespace SDP {
         }
 
     public:
+        void Enable(const bool enable)
+        {
+            _enabled = enable;
+        }
+        bool IsEnabled() const
+        {
+            return (_enabled);
+        }
         Attribute::ServiceRecordHandle* ServiceRecordHandle()
         {
             if (_serviceRecordHandle == nullptr) {
@@ -910,7 +982,6 @@ namespace SDP {
         {
             return (_serviceRecordHandle);
         }
-
         Attribute::ServiceClassIDList* ServiceClassIDList()
         {
             if (_serviceClassIDList == nullptr) {
@@ -923,7 +994,6 @@ namespace SDP {
         {
             return (_serviceClassIDList);
         }
-
         Attribute::ProtocolDescriptorList* ProtocolDescriptorList()
         {
             if (_protocolDescriptorList == nullptr) {
@@ -936,7 +1006,6 @@ namespace SDP {
         {
             return (_protocolDescriptorList);
         }
-
         Attribute::BrowseGroupList* BrowseGroupList()
         {
             if (_browseGroupList == nullptr) {
@@ -949,7 +1018,6 @@ namespace SDP {
         {
             return (_browseGroupList);
         }
-
         Attribute::LanguageBaseAttributeIDList* LanguageBaseAttributeIDList()
         {
             if (_languageBaseAttributeIDList == nullptr) {
@@ -962,7 +1030,6 @@ namespace SDP {
         {
             return (_languageBaseAttributeIDList);
         }
-
         Attribute::ProfileDescriptorList* ProfileDescriptorList()
         {
             if (_profileDescriptorList == nullptr) {
@@ -993,24 +1060,27 @@ namespace SDP {
                 _attributes.emplace(id, buffer);
             }
         }
-
+        template<typename TYPE, /* if id is enum */ typename std::enable_if<std::is_enum<TYPE>::value, int>::type = 0>
+        void Add(const TYPE id, const Buffer& buffer)
+        {
+            // enum class is not implicitly convertible to its underlying type
+            Add(static_cast<uint16_t>(id), buffer);
+        }
         template<typename ...Args>
         void Description(const std::string& name, const std::string& description = {}, const std::string& provider = {}, Args... args)
         {
             uint16_t id = LanguageBaseAttributeIDList()->Add(args...);
 
             if (name.empty() == false) {
-                Add(id, Data::Element<std::string>(name));
+                Add(id + AttributeDescriptor::ServiceNameOffset, Data::Element<std::string>(name));
             }
-            id++;
 
             if (description.empty() == false) {
-                Add(id, Data::Element<std::string>(description));
+                Add(id + AttributeDescriptor::ServiceDescriptionOffset, Data::Element<std::string>(description));
             }
-            id++;
 
             if (provider.empty() == false) {
-                Add(id, Data::Element<std::string>(provider));
+                Add(id + AttributeDescriptor::ProviderNameOffset, Data::Element<std::string>(provider));
             }
         }
 
@@ -1058,6 +1128,7 @@ namespace SDP {
         }
 
     private:
+        bool _enabled;
         Attribute::ServiceRecordHandle* _serviceRecordHandle;
         Attribute::ServiceClassIDList* _serviceClassIDList;
         Attribute::ProtocolDescriptorList* _protocolDescriptorList;
