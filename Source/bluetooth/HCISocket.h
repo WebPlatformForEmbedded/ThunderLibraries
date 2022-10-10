@@ -927,6 +927,7 @@ namespace Bluetooth {
         {
             return ((_state & DISCOVERING) != 0);
         }
+
         uint32_t Advertising(const bool enable, const uint8_t mode = 0);
         void Scan(const uint16_t scanTime, const bool limited);
         void Scan(const uint16_t scanTime, const bool limited, const bool passive);
@@ -935,6 +936,7 @@ namespace Bluetooth {
 
         uint32_t ReadStoredLinkKeys(const Address adr, const bool all, LinkKeys& keys);
 
+    public:
         template<typename COMMAND>
         void Execute(const uint32_t waitTime, const COMMAND& cmd, std::function<void(COMMAND&, const uint32_t error)> handler)
         {
@@ -1220,45 +1222,55 @@ namespace Bluetooth {
                     result = true;
                 }
                 else {
-                    TRACE_L1("Could not bring up the interface [%d]. Error: %d\n", deviceId, errno);
+                    TRACE_L1("Could not bring up the interface [%d]. Error: %d", deviceId, errno);
                 }
                 ::close(descriptor);
             }
             return (result);
         }
 
+    public:
         Info Settings() const;
+
         uint32_t Power(bool enabled);
+
         uint32_t Bondable(bool enabled);
         uint32_t Connectable(const bool enabled);
         uint32_t FastConnectable(const bool enabled);
-        uint32_t Discoverable(const bool enabled);
+        uint32_t Discoverable(const bool enabled, const bool limited = false, const uint16_t duration = 0 /* infinite */);
         uint32_t Advertising(bool enabled);
         uint32_t SimplePairing(bool enabled);
         uint32_t HighSpeed(bool enabled);
         uint32_t LowEnergy(bool enabled);
         uint32_t SecureLink(bool enabled);
         uint32_t SecureConnection(bool enabled);
-        uint32_t DeviceClass(const uint8_t major, const uint8_t minor);
-        uint32_t Block(const Address::type type, const Address& address);
-        uint32_t Unblock(const Address::type type, const Address& address);
-        uint32_t Privacy(const uint8_t mode, const uint8_t identity[16]);
-        uint32_t LinkKey(const LinkKeys& keys, const bool debugKeys = false);
-        uint32_t LongTermKey(const LongTermKeys& keys);
-        uint32_t IdentityKey(const IdentityKeys& keys);
-        uint32_t Name(const string& shortName, const string& longName);
         uint32_t PublicAddress(const Address& address);
 
-        uint32_t AddDevice(const Address::type type, const Address& address, const autoconnmode value = REPORT);
-        uint32_t RemoveDevice(const Address::type type, const Address& address);
+        uint32_t Name(const string& shortName, const string& longName);
+        uint32_t DeviceClass(const uint8_t major, const uint8_t minor);
+        uint32_t AddUUID(const UUID& uuid, const uint8_t codServiceBits);
+        uint32_t RemoveUUID(const UUID& uuid);
+
         uint32_t Discovering(const bool on, const bool regular, const bool LowEnergy);
+        uint32_t Block(const Address& address, const Address::type type);
+        uint32_t Unblock(const Address& address, const Address::type type);
+        uint32_t AddDevice(const Address& address, const Address::type type, const autoconnmode value = REPORT);
+        uint32_t RemoveDevice(const Address& address, const Address::type type);
+
         uint32_t Pair(const Address& remote, const Address::type type, const capabilities cap = NO_INPUT_NO_OUTPUT);
         uint32_t Unpair(const Address& remote, const Address::type type);
         uint32_t PairAbort(const Address& remote, const Address::type type);
+
         uint32_t UserPINCodeReply(const Address& remote, const Address::type type, const string& pinCode);
         uint32_t UserPasskeyReply(const Address& remote, const Address::type type, const uint32_t passkey);
         uint32_t UserPasskeyConfirmReply(const Address& remote, const Address::type type, const bool confirm);
 
+        uint32_t Privacy(const uint8_t mode, const uint8_t identity[16] = nullptr);
+        uint32_t LinkKey(const LinkKeys& keys, const bool debugKeys = false);
+        uint32_t LongTermKey(const LongTermKeys& keys);
+        uint32_t IdentityKey(const IdentityKeys& keys);
+
+    public:
         uint32_t Notifications(const bool enabled);
 
     protected:
