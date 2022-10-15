@@ -30,7 +30,8 @@ namespace Bluetooth {
         static const uint8_t BASE[];
 
     public:
-        UUID() {
+        UUID()
+        {
             _uuid[0] = 0;
         }
         UUID(const uint32_t uuid)
@@ -73,13 +74,18 @@ namespace Bluetooth {
         }
 
     public:
-        bool IsValid() const {
+        bool IsValid() const
+        {
             return (_uuid[0] != 0);
         }
         uint16_t Short() const
         {
             ASSERT(_uuid[0] == 2);
             return ((_uuid[14] << 8) | _uuid[13]);
+        }
+        const uint8_t* Full() const
+        {
+            return (&_uuid[1]);
         }
         bool operator==(const UUID& rhs) const
         {

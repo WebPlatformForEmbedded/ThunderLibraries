@@ -38,7 +38,6 @@ uint32_t HCISocket::Advertising(const bool enable, const uint8_t mode)
             result = Core::ERROR_BAD_REQUEST;
             Command::AdvertisingParametersLE parameters;
 
-            parameters.Clear();
             parameters->min_interval = htobs(0x0800);
             parameters->max_interval = htobs(0x0800);
             parameters->advtype = mode;
@@ -49,7 +48,6 @@ uint32_t HCISocket::Advertising(const bool enable, const uint8_t mode)
 
                 Command::AdvertisingEnableLE advertising;
 
-                advertising.Clear();
                 advertising->enable = 1;
 
                 if (Exchange(MAX_ACTION_TIMEOUT, advertising, advertising) == Core::ERROR_NONE) { //  && (advertising.Response() == 0)) {
@@ -62,7 +60,6 @@ uint32_t HCISocket::Advertising(const bool enable, const uint8_t mode)
         result = Core::ERROR_BAD_REQUEST;
         Command::AdvertisingEnableLE advertising;
 
-        advertising.Clear();
         advertising->enable = 0;
 
         if ((Exchange(MAX_ACTION_TIMEOUT, advertising, advertising) == Core::ERROR_NONE) && (advertising.Response() == 0)) {
@@ -85,7 +82,6 @@ void HCISocket::Scan(const uint16_t scanTime, const bool limited)
         Command::Inquiry inquiry;
         Command::InquiryCancel inquiryCancel;
 
-        inquiry.Clear();
         inquiry->num_rsp = 255;
         inquiry->length = 30; /* in 1.28s == 35s */
 
@@ -96,27 +92,33 @@ void HCISocket::Scan(const uint16_t scanTime, const bool limited)
         inquiry->lap[2] = 0x9e;
 
         while (timeLeft > 0) {
-            if ((Exchange(MAX_ACTION_TIMEOUT, inquiry, inquiry) == Core::ERROR_NONE) && (inquiry.Response() == 0)) {
-                _state.SetState(static_cast<state>(_state.GetState() | SCANNING));
+            if (Exchange(MAX_ACTION_TIMEOUT, inquiry, inquiry) == Core::ERROR_NONE) {
+                if (inquiry.Response() == 0) {
+                    _state.SetState(static_cast<state>(_state.GetState() | SCANNING));
 
-                _state.Unlock();
+                    _state.Unlock();
 
-                // This is not super-precise, but it doesn't have to be.
-                uint16_t roundTime = (timeLeft > lapTime? lapTime : timeLeft);
-                if (_state.WaitState(ABORT, (roundTime * 1000)) == true) {
-                    roundTime = timeLeft; // essentially break
+                    // This is not super-precise, but it doesn't have to be.
+                    uint16_t roundTime = (timeLeft > lapTime? lapTime : timeLeft);
+                    if (_state.WaitState(ABORT, (roundTime * 1000)) == true) {
+                        roundTime = timeLeft; // essentially break
+                    }
+                    timeLeft -= roundTime;
+
+                    _state.Lock();
+
+                    Exchange(MAX_ACTION_TIMEOUT, inquiryCancel, inquiryCancel);
+                    _state.SetState(static_cast<state>(_state.GetState() & (~(ABORT | SCANNING))));
+                } else {
+                    TRACE(Trace::Error, (_T("Inquiry command failed [0x%02x]"), inquiry.Response()));
+                    break;
                 }
-                timeLeft -= roundTime;
-
-                _state.Lock();
-
-                Exchange(MAX_ACTION_TIMEOUT, inquiryCancel, inquiryCancel);
-                _state.SetState(static_cast<state>(_state.GetState() & (~(ABORT | SCANNING))));
-           } else {
-                TRACE_L1(_T("Failed to send Inquiry command"));
+            } else {
                 break;
-           }
+            }
         }
+    } else {
+        TRACE_L1("Busy, controller is now scanning or pairing");
     }
 
     _state.Unlock();
@@ -128,7 +130,6 @@ void HCISocket::Scan(const uint16_t scanTime, const bool limited, const bool pas
 
     if ((_state & ACTION_MASK) == 0) {
         Command::ScanParametersLE parameters;
-        parameters.Clear();
         const uint16_t window = (limited? 0x12 : 0x10 /* 10ms */);
         // Make sure window is smaller than interval, so the link layer has time for other Bluetooth operations during scanning.
         parameters->type = (passive? SCAN_TYPE_PASSIVE : SCAN_TYPE_ACTIVE);
@@ -137,34 +138,37 @@ void HCISocket::Scan(const uint16_t scanTime, const bool limited, const bool pas
         parameters->own_bdaddr_type = LE_PUBLIC_ADDRESS;
         parameters->filter = SCAN_FILTER_POLICY_ALL;
 
-        if ((Exchange(MAX_ACTION_TIMEOUT, parameters, parameters) == Core::ERROR_NONE) && (parameters.Response() == 0)) {
+        if (Exchange(MAX_ACTION_TIMEOUT, parameters, parameters) == Core::ERROR_NONE) {
+            if (parameters.Response() == 0) {
+                Command::ScanEnableLE scanner;
+                scanner->enable = 1;
+                scanner->filter_dup = SCAN_FILTER_DUPLICATES_ENABLE;
 
-            Command::ScanEnableLE scanner;
-            scanner.Clear();
-            scanner->enable = 1;
-            scanner->filter_dup = SCAN_FILTER_DUPLICATES_ENABLE;
+                if (Exchange(MAX_ACTION_TIMEOUT, scanner, scanner) == Core::ERROR_NONE) {
+                    if (scanner.Response() == 0) {
+                        _state.SetState(static_cast<state>(_state.GetState() | SCANNING));
 
-            if ((Exchange(MAX_ACTION_TIMEOUT, scanner, scanner) == Core::ERROR_NONE) && (scanner.Response() == 0)) {
+                        // Now lets wait for the scanning period..
+                        _state.Unlock();
 
-                _state.SetState(static_cast<state>(_state.GetState() | SCANNING));
+                        _state.WaitState(ABORT, scanTime * 1000);
 
-                // Now lets wait for the scanning period..
-                _state.Unlock();
+                        _state.Lock();
 
-                _state.WaitState(ABORT, scanTime * 1000);
+                        scanner->enable = 0;
+                        Exchange(MAX_ACTION_TIMEOUT, scanner, scanner);
 
-                _state.Lock();
-
-                scanner->enable = 0;
-                Exchange(MAX_ACTION_TIMEOUT, scanner, scanner);
-
-                _state.SetState(static_cast<state>(_state.GetState() & (~(ABORT | SCANNING))));
+                        _state.SetState(static_cast<state>(_state.GetState() & (~(ABORT | SCANNING))));
+                    } else {
+                        TRACE(Trace::Error, (_T("ScanEnableLE command failed [0x%02x]"), scanner.Response()));
+                    }
+                }
             } else {
-                TRACE_L1(_T("Failed to send ScanEnableLE command"));
+                TRACE(Trace::Error, (_T("ScanParametersLE command failed [0x%02x]"), parameters.Response()));
             }
-        } else {
-            TRACE_L1(_T("Failed to send ScanParametersLE command"));
         }
+    } else {
+        TRACE_L1("Busy, controller is now scanning or pairing");
     }
 
     _state.Unlock();
@@ -186,38 +190,47 @@ void HCISocket::Discovery(const bool enable)
     _state.Lock();
 
     if ((_state & ACTION_MASK) == 0) {
-        bool result = true;
+        if (((enable == true) && (IsDiscovering() == true)) || ((enable == false) && (IsDiscovering() == false))) {
+            TRACE_L1("Target LE discovery mode already set...");
+        } else {
+            bool result = false;
 
-        if (enable == true) {
-            Command::ScanParametersLE parameters;
-            parameters.Clear();
-            const uint16_t window = 0x10; // 10ms
-            parameters->type = SCAN_TYPE_PASSIVE;
-            // Make sure window is smaller than interval, so the link layer has time for other Bluetooth operations during scanning.
-            parameters->interval = htobs(8 * window);
-            parameters->window = htobs(window);
-            parameters->own_bdaddr_type = LE_PUBLIC_ADDRESS;
-            parameters->filter = SCAN_FILTER_POLICY_ALL;
+            if (enable == true) {
+                Command::ScanParametersLE parameters;
+                const uint16_t window = 0x10; // 10ms
+                parameters->type = SCAN_TYPE_PASSIVE;
+                // Make sure window is smaller than interval, so the link layer has time for other Bluetooth operations during scanning.
+                parameters->interval = htobs(8 * window);
+                parameters->window = htobs(window);
+                parameters->own_bdaddr_type = LE_PUBLIC_ADDRESS;
+                parameters->filter = SCAN_FILTER_POLICY_ALL;
 
-            uint32_t rv = Exchange(MAX_ACTION_TIMEOUT, parameters, parameters);
-            if (rv != Core::ERROR_NONE) {
-                TRACE_L1(_T("Failed to send ScanParametersLE command [%i]"), rv);
+                uint32_t rv = Exchange(MAX_ACTION_TIMEOUT, parameters, parameters);
+                if (rv == Core::ERROR_NONE) {
+                    if (parameters.Response() == 0) {
+                        result = true;
+                    } else  {
+                        TRACE(Trace::Error, (_T("ScanParametersLE command failed [0x%02x]"), parameters.Response()));
+                    }
+                }
             }
-            if ((rv != Core::ERROR_NONE) || (parameters.Response() != 0)) {
-                result = false;
+
+            if ((result == true) || (enable == false)) {
+                Command::ScanEnableLE scanner;
+                scanner->enable = enable;
+                scanner->filter_dup = SCAN_FILTER_DUPLICATES_ENABLE;
+
+                if (Exchange(MAX_ACTION_TIMEOUT, scanner, scanner) == Core::ERROR_NONE) {
+                    if (scanner.Response() == 0) {
+                        _state.SetState(static_cast<state>(enable? (_state.GetState() | DISCOVERING) : (_state.GetState() & (~DISCOVERING))));
+                    } else {
+                        TRACE(Trace::Error, (_T("ScanEnableLE command failed [0x%02x]"), scanner.Response()));
+                    }
+                }
             }
         }
-
-        if (result == true) {
-            Command::ScanEnableLE scanner;
-            scanner.Clear();
-            scanner->enable = enable;
-            scanner->filter_dup = SCAN_FILTER_DUPLICATES_ENABLE;
-
-            if ((Exchange(MAX_ACTION_TIMEOUT, scanner, scanner) == Core::ERROR_NONE) && (scanner.Response() == 0)) {
-                _state.SetState(static_cast<state>(enable? (_state.GetState() | DISCOVERING) : (_state.GetState() & (~DISCOVERING))));
-            }
-        }
+    } else {
+        TRACE_L1("Busy, controller is now scanning or pairing");
     }
 
     _state.Unlock();
@@ -227,9 +240,8 @@ uint32_t HCISocket::ReadStoredLinkKeys(const Address adr, const bool all, LinkKe
 {
     Command::ReadStoredLinkKey parameters;
 
-    parameters.Clear();
     ::memcpy(&(parameters->bdaddr), adr.Data(), sizeof(parameters->bdaddr));
-    parameters->read_all= (all ? 0x1 : 0x0);
+    parameters->read_all = (all ? 0x1 : 0x0);
 
     return (Exchange(MAX_ACTION_TIMEOUT, parameters, parameters));
 }
@@ -268,8 +280,10 @@ uint32_t HCISocket::ReadStoredLinkKeys(const Address adr, const bool all, LinkKe
         BtUtilsHciFilterSetEvent(EVT_CONN_COMPLETE, &_filter);
         BtUtilsHciFilterSetEvent(EVT_DISCONN_COMPLETE, &_filter);
 
-	if (setsockopt(Handle(), SOL_HCI, HCI_FILTER, &_filter, sizeof(_filter)) < 0) {
-            TRACE_L1("Can't set filter:  %s (%d)\n", strerror(errno), errno);
+	    if (setsockopt(Handle(), SOL_HCI, HCI_FILTER, &_filter, sizeof(_filter)) < 0) {
+            TRACE(Trace::Error, (_T("Can't set HCI filter: %s (%d)"), strerror(errno), errno));
+        } else {
+            TRACE(Trace::Information, (_T("HCI Filter set!")));
         }
     }
 }
@@ -325,7 +339,7 @@ template<> void HCISocket::DeserializeScanResponse<le_advertising_info>(const ui
         }
     }
     else {
-        TRACE_L1(_T("EVT_HCI: Message too short => (hci_event_hdr)"));
+        TRACE_L1("EVT_HCI: Message too short => (hci_event_hdr)");
     }
 
     return (result);
@@ -428,14 +442,16 @@ public:
     {
         return (reinterpret_cast<OUTBOUND*>(&(_buffer[sizeof(mgmt_hdr)])));
     }
-    uint16_t Result() const {
+    uint16_t Result() const
+    {
         return (_error);
     }
     const INBOUND& Response()
     {
         return (_inbound);
     }
-    uint16_t Loaded () const {
+    uint16_t Loaded () const
+    {
         return (_inboundSize);
     }
 
@@ -474,10 +490,10 @@ private:
                 const mgmt_ev_cmd_status* data = reinterpret_cast<const mgmt_ev_cmd_status*>(&(stream[sizeof(mgmt_hdr)]));
                 if (btohs(data->opcode) == OPCODE) {
                     if (len < sizeof(mgmt_ev_cmd_status)) {
-                        TRACE(Trace::Error, (_T("MGMT_EV_CMD_STATUS: Message too short; opcode=%04X"), data->opcode));
+                       TRACE_L1("MGMT_EV_CMD_STATUS: Message too short; opcode=%04X", data->opcode);
                         _error  = Core::ERROR_GENERAL;
                     } else {
-                        TRACE(Trace::Information, (_T("MGMT_EV_CMD_STATUS: opcode=0x%04X, status=%d"), data->opcode, data->status));
+                        TRACE_L2("MGMT_EV_CMD_STATUS: opcode=0x%04X, status=%d", data->opcode, data->status);
                         _error = data->status;
                     }
                     result = length;
@@ -488,15 +504,17 @@ private:
                 if (btohs(data->opcode) == OPCODE) {
                     uint16_t len = (length - sizeof(mgmt_hdr));
                     if (len < sizeof(mgmt_ev_cmd_complete)) {
-                        TRACE(Trace::Error, (_T("MGMT_EV_CMD_COMPLETE: Message too short; opcode=%04X"), data->opcode));
+                        TRACE_L1("MGMT_EV_CMD_COMPLETE: Message too short; opcode=%04X", data->opcode);
                         _error = Core::ERROR_GENERAL;
                     } else {
                         _inboundSize = std::min(
                             static_cast<uint16_t>(sizeof(INBOUND)),
                             static_cast<uint16_t>(payload - sizeof(mgmt_ev_cmd_complete)));
+
                         _inboundSize = std::min(_inboundSize, static_cast<uint16_t>(len - sizeof(mgmt_ev_cmd_complete)));
                         ::memcpy(reinterpret_cast<uint8_t*>(&_inbound), data->data, _inboundSize);
-                        TRACE(Trace::Information, (_T("MGMT_EV_CMD_COMPLETE: opcode=0x%04X, status=%d"), data->opcode, data->status));
+
+                        TRACE_L2("MGMT_EV_CMD_COMPLETE: opcode=0x%04X, status=%d", data->opcode, data->status);
                         _error = data->status;
                     }
                     result = length;
@@ -505,7 +523,8 @@ private:
         }
         return (result);
     }
-    virtual state IsCompleted() const override {
+    virtual state IsCompleted() const override
+    {
         return (_error != static_cast<uint16_t>(~0) ? state::COMPLETED : state::INPROGRESS);
     }
 
@@ -527,6 +546,7 @@ public:
 
     ManagementFixedType(const uint16_t adapterIndex)
         : ManagementType<OPCODE,OUTBOUND,INBOUND> (sizeof(_buffer), _buffer, adapterIndex) {
+        this->Clear();
     }
     ~ManagementFixedType() {
     }
@@ -550,11 +570,14 @@ public:
         : ManagementType<OPCODE,OUTBOUND,INBOUND> (copy._buffer){
     }
 
-    static ManagementListType<OPCODE, OUTBOUND, INBOUND, LISTTYPE> Instance (const uint16_t adapterIndex, const LISTTYPE& list) {
+    static ManagementListType<OPCODE, OUTBOUND, INBOUND, LISTTYPE> Instance(const uint16_t adapterIndex, const LISTTYPE& list) {
         uint16_t listLength = (list.Entries() * LISTTYPE::Length());
         uint16_t length = sizeof(mgmt_hdr) + sizeof(OUTBOUND) + listLength;
         uint8_t* buffer = new uint8_t[length];
+        ASSERT(buffer != nullptr);
+
         ManagementListType<OPCODE, OUTBOUND, INBOUND, LISTTYPE> result(length, buffer, adapterIndex);
+        result.Clear();
         list.Clone(listLength, &(buffer[sizeof(mgmt_hdr) + sizeof(OUTBOUND)]));
         return (result);
     }
@@ -575,10 +598,14 @@ static uint32_t MANAGMENT_TIMEOUT = 500;
 
 static constexpr uint8_t DISABLE_MODE = 0x00;
 static constexpr uint8_t ENABLE_MODE  = 0x01;
+static constexpr uint8_t LIMITED_MODE  = 0x02;
 
 namespace Management {
+
     typedef ManagementFixedType<MGMT_OP_READ_INFO, Core::Void, mgmt_rp_read_info> Settings;
+
     typedef ManagementFixedType<MGMT_OP_SET_POWERED, mgmt_mode, uint32_t> Power;
+
     typedef ManagementFixedType<MGMT_OP_SET_CONNECTABLE, mgmt_mode, uint32_t> Connectable;
     typedef ManagementFixedType<MGMT_SETTING_FAST_CONNECTABLE, mgmt_mode, uint32_t> FastConnectable;
     typedef ManagementFixedType<MGMT_OP_SET_BONDABLE, mgmt_mode, uint32_t> Bondable;
@@ -590,26 +617,33 @@ namespace Management {
     typedef ManagementFixedType<MGMT_OP_SET_ADVERTISING, mgmt_mode, uint32_t> Advertising;
     typedef ManagementFixedType<MGMT_OP_SET_CONNECTABLE, mgmt_mode, uint32_t> Connectable;
     typedef ManagementFixedType<MGMT_OP_SET_DISCOVERABLE, mgmt_cp_set_discoverable, uint32_t> Discoverable;
+    typedef ManagementFixedType<MGMT_OP_SET_PUBLIC_ADDRESS, mgmt_cp_set_public_address, uint32_t> PublicAddress;
+
+    typedef ManagementFixedType<MGMT_OP_SET_LOCAL_NAME, mgmt_cp_set_local_name, mgmt_cp_set_local_name> DeviceName;
     typedef ManagementFixedType<MGMT_OP_SET_DEV_CLASS, mgmt_cp_set_dev_class, Core::Void> DeviceClass;
+    typedef ManagementFixedType<MGMT_OP_ADD_UUID, mgmt_cp_add_uuid, uint8_t[3]> AddUUID;
+    typedef ManagementFixedType<MGMT_OP_REMOVE_UUID, mgmt_cp_remove_uuid, uint8_t[3]> RemoveUUID;
+
     typedef ManagementFixedType<MGMT_OP_START_DISCOVERY, mgmt_cp_start_discovery, uint8_t> StartDiscovery;
     typedef ManagementFixedType<MGMT_OP_STOP_DISCOVERY, mgmt_cp_stop_discovery, uint8_t> StopDiscovery;
+    typedef ManagementFixedType<MGMT_OP_BLOCK_DEVICE, mgmt_cp_block_device, mgmt_addr_info> Block;
+    typedef ManagementFixedType<MGMT_OP_UNBLOCK_DEVICE, mgmt_cp_unblock_device, mgmt_addr_info> Unblock;
+    typedef ManagementFixedType<MGMT_OP_ADD_DEVICE, mgmt_cp_add_device, mgmt_rp_add_device> AddDevice;
+    typedef ManagementFixedType<MGMT_OP_REMOVE_DEVICE, mgmt_cp_remove_device, mgmt_rp_remove_device> RemoveDevice;
+
     typedef ManagementFixedType<MGMT_OP_PAIR_DEVICE, mgmt_cp_pair_device, mgmt_rp_pair_device> Pair;
     typedef ManagementFixedType<MGMT_OP_UNPAIR_DEVICE, mgmt_cp_unpair_device, mgmt_rp_unpair_device> Unpair;
     typedef ManagementFixedType<MGMT_OP_CANCEL_PAIR_DEVICE, mgmt_addr_info, Core::Void> PairAbort;
+
     typedef ManagementFixedType<MGMT_OP_PIN_CODE_REPLY, mgmt_cp_pin_code_reply, Core::Void> UserPINCodeReply;
     typedef ManagementFixedType<MGMT_OP_PIN_CODE_NEG_REPLY, mgmt_cp_pin_code_neg_reply, Core::Void> UserPINCodeNegReply;
     typedef ManagementFixedType<MGMT_OP_USER_CONFIRM_REPLY, mgmt_cp_user_confirm_reply, Core::Void> UserConfirmReply;
     typedef ManagementFixedType<MGMT_OP_USER_CONFIRM_NEG_REPLY, mgmt_cp_user_confirm_reply, Core::Void> UserConfirmNegReply;
     typedef ManagementFixedType<MGMT_OP_USER_PASSKEY_REPLY, mgmt_cp_user_passkey_reply, Core::Void> UserPasskeyReply;
     typedef ManagementFixedType<MGMT_OP_USER_PASSKEY_NEG_REPLY, mgmt_cp_user_passkey_reply, Core::Void> UserPasskeyNegReply;
-    typedef ManagementFixedType<MGMT_OP_READ_INDEX_LIST, Core::Void, uint16_t[33]> Indexes;
-    typedef ManagementFixedType<MGMT_OP_SET_LOCAL_NAME, mgmt_cp_set_local_name, mgmt_cp_set_local_name> DeviceName;
+
     typedef ManagementFixedType<MGMT_OP_SET_PRIVACY, mgmt_cp_set_privacy, Core::Void> Privacy;
-    typedef ManagementFixedType<MGMT_OP_SET_PUBLIC_ADDRESS, mgmt_cp_set_public_address, uint32_t> PublicAddress;
-    typedef ManagementFixedType<MGMT_OP_BLOCK_DEVICE, mgmt_cp_block_device, mgmt_addr_info> Block;
-    typedef ManagementFixedType<MGMT_OP_UNBLOCK_DEVICE, mgmt_cp_unblock_device, mgmt_addr_info> Unblock;
-    typedef ManagementFixedType<MGMT_OP_ADD_DEVICE, mgmt_cp_add_device, mgmt_rp_add_device> AddDevice;
-    typedef ManagementFixedType<MGMT_OP_REMOVE_DEVICE, mgmt_cp_remove_device, mgmt_rp_remove_device> RemoveDevice;
+    typedef ManagementFixedType<MGMT_OP_READ_INDEX_LIST, Core::Void, uint16_t[33]> Indexes;
     typedef ManagementListType<MGMT_OP_LOAD_LINK_KEYS, mgmt_cp_load_link_keys, uint32_t, LinkKeys> LinkKeys;
     typedef ManagementListType<MGMT_OP_LOAD_LONG_TERM_KEYS, mgmt_cp_load_long_term_keys, uint32_t, LongTermKeys> LongTermKeys;
     typedef ManagementListType<MGMT_OP_LOAD_IRKS, mgmt_cp_load_irks, uint32_t, IdentityKeys> IdentityKeys;
@@ -625,6 +659,8 @@ namespace Management {
             for (uint16_t index = 0; index < message.Response()[0]; index++) {
                 adapters.push_back(message.Response()[index+1]);
             }
+        } else {
+            TRACE_GLOBAL(Trace::Error, (_T("ReadIndexList command failed [0x%02x]"), message.Result()));
         }
     }
 }
@@ -632,20 +668,24 @@ namespace Management {
 uint32_t ManagementSocket::Name(const string& shortName, const string& longName)
 {
     Management::DeviceName message(_deviceId);
-    std::string shortName2(Core::ToString(shortName.substr(0, sizeof(message->short_name) - 1)));
-    std::string longName2(Core::ToString(longName.substr(0, sizeof(message->name) - 1)));
+    std::string shortName2(shortName.substr(0, sizeof(message->short_name) - 1));
+    std::string longName2(longName.substr(0, sizeof(message->name) - 1));
 
-    strcpy (reinterpret_cast<char*>(message->short_name), shortName2.c_str());
-    strcpy (reinterpret_cast<char*>(message->name), longName2.c_str());
+    ::strcpy(reinterpret_cast<char*>(message->short_name), shortName2.c_str());
+    ::strcpy(reinterpret_cast<char*>(message->name), longName2.c_str());
 
     uint32_t result = Exchange(MANAGMENT_TIMEOUT, message, message);
     if ((result == Core::ERROR_NONE) && (message.Result() != MGMT_STATUS_SUCCESS)) {
+        TRACE(Trace::Error, (_T("SetLocalName command failed [0x%02x]"), message.Result()));
         result = Core::ERROR_ASYNC_FAILED;
     }
 
     return (result);
 }
 
+
+// COD value us composed out of major/minor from this method and OR'd values of
+// service bits from each UUID added with AddUUID()
 uint32_t ManagementSocket::DeviceClass(const uint8_t major, const uint8_t minor)
 {
     Management::DeviceClass message(_deviceId);
@@ -654,19 +694,58 @@ uint32_t ManagementSocket::DeviceClass(const uint8_t major, const uint8_t minor)
 
     uint32_t result = Exchange(MANAGMENT_TIMEOUT, message, message);
     if ((result == Core::ERROR_NONE) && (message.Result() != MGMT_STATUS_SUCCESS)) {
+        TRACE(Trace::Error, (_T("SetDevClass command failed [0x%02x]"), message.Result()));
         result = Core::ERROR_ASYNC_FAILED;
     }
 
     return (result);
 }
 
-uint32_t ManagementSocket::Discoverable(const bool enabled)
+uint32_t ManagementSocket::AddUUID(const UUID& uuid, const uint8_t codServiceBits)
 {
-    Management::Discoverable message(_deviceId);
-    message->val = (enabled ? ENABLE_MODE : DISABLE_MODE);
+    ASSERT(uuid.IsValid() == true);
+
+    Management::AddUUID message(_deviceId);
+    ::memcpy(message->uuid, uuid.Full(), sizeof(message->uuid));
+    message->svc_hint = codServiceBits;
 
     uint32_t result = Exchange(MANAGMENT_TIMEOUT, message, message);
     if ((result == Core::ERROR_NONE) && (message.Result() != MGMT_STATUS_SUCCESS)) {
+        TRACE(Trace::Error, (_T("AddUUID command failed [0x%02x]"), message.Result()));
+        result = Core::ERROR_ASYNC_FAILED;
+    }
+
+    return (result);
+}
+
+uint32_t ManagementSocket::RemoveUUID(const UUID& uuid)
+{
+    ASSERT(uuid.IsValid() == true);
+
+    Management::RemoveUUID message(_deviceId);
+    ::memcpy(message->uuid, uuid.Full(), sizeof(message->uuid));
+
+    uint32_t result = Exchange(MANAGMENT_TIMEOUT, message, message);
+    if ((result == Core::ERROR_NONE) && (message.Result() != MGMT_STATUS_SUCCESS)) {
+        TRACE(Trace::Error, (_T("RemoveUUID command failed [0x%02x]"), message.Result()));
+        result = Core::ERROR_ASYNC_FAILED;
+    }
+
+    return (result);
+}
+
+uint32_t ManagementSocket::Discoverable(const bool enabled, const bool limited, const uint16_t duration)
+{
+    ASSERT((enabled == true) || (duration == 0));
+    ASSERT((limited == false) || (duration > 0));
+
+    Management::Discoverable message(_deviceId);
+    message->val = (enabled ? (limited? LIMITED_MODE : ENABLE_MODE) : DISABLE_MODE);
+    message->timeout = htobs(duration);
+
+    uint32_t result = Exchange(MANAGMENT_TIMEOUT, message, message);
+    if ((result == Core::ERROR_NONE) && (message.Result() != MGMT_STATUS_SUCCESS)) {
+        TRACE(Trace::Error, (_T("SetDiscoverable command failed [0x%02x]"), message.Result()));
         result = Core::ERROR_ASYNC_FAILED;
     }
 
@@ -680,6 +759,7 @@ uint32_t ManagementSocket::Power(const bool enabled)
 
     uint32_t result = Exchange(MANAGMENT_TIMEOUT, message, message);
     if ((result == Core::ERROR_NONE) && (message.Result() != MGMT_STATUS_SUCCESS)) {
+        TRACE(Trace::Error, (_T("SetPowered command failed [0x%02x]"), message.Result()));
         result = Core::ERROR_ASYNC_FAILED;
     }
 
@@ -693,6 +773,7 @@ uint32_t ManagementSocket::Connectable(const bool enabled)
 
     uint32_t result = Exchange(MANAGMENT_TIMEOUT, message, message);
     if ((result == Core::ERROR_NONE) && (message.Result() != MGMT_STATUS_SUCCESS)) {
+        TRACE(Trace::Error, (_T("SetConnectable command failed [0x%02x]"), message.Result()));
         result = Core::ERROR_ASYNC_FAILED;
     }
 
@@ -706,13 +787,14 @@ uint32_t ManagementSocket::FastConnectable(const bool enabled)
 
     uint32_t result = Exchange(MANAGMENT_TIMEOUT, message, message);
     if ((result == Core::ERROR_NONE) && (message.Result() != MGMT_STATUS_SUCCESS)) {
+        TRACE(Trace::Error, (_T("SetFastConnectable command failed [0x%02x]"), message.Result()));
         result = Core::ERROR_ASYNC_FAILED;
     }
 
     return (result);
 }
 
-uint32_t ManagementSocket::Block(const Address::type type, const Address& address)
+uint32_t ManagementSocket::Block(const Address& address, const Address::type type)
 {
     Management::Block message(_deviceId);
     message->addr.type = type;
@@ -720,13 +802,14 @@ uint32_t ManagementSocket::Block(const Address::type type, const Address& addres
 
     uint32_t result = Exchange(MANAGMENT_TIMEOUT, message, message);
     if ((result == Core::ERROR_NONE) && (message.Result() != MGMT_STATUS_SUCCESS)) {
+        TRACE(Trace::Error, (_T("BlockDevice command failed [0x%02x]"), message.Result()));
         result = Core::ERROR_ASYNC_FAILED;
     }
 
     return (result);
 }
 
-uint32_t ManagementSocket::Unblock(const Address::type type, const Address& address)
+uint32_t ManagementSocket::Unblock(const Address& address, const Address::type type)
 {
     Management::Unblock message(_deviceId);
     message->addr.type = type;
@@ -734,13 +817,14 @@ uint32_t ManagementSocket::Unblock(const Address::type type, const Address& addr
 
     uint32_t result = Exchange(MANAGMENT_TIMEOUT, message, message);
     if ((result == Core::ERROR_NONE) && (message.Result() != MGMT_STATUS_SUCCESS)) {
+        TRACE(Trace::Error, (_T("UnblockDevice command failed [0x%02x]"), message.Result()));
         result = Core::ERROR_ASYNC_FAILED;
     }
 
     return (result);
 }
 
-uint32_t ManagementSocket::AddDevice(const Address::type type, const Address& address, const autoconnmode value)
+uint32_t ManagementSocket::AddDevice(const Address& address, const Address::type type, const autoconnmode value)
 {
     Management::AddDevice message(_deviceId);
     message->action = value;
@@ -756,7 +840,7 @@ uint32_t ManagementSocket::AddDevice(const Address::type type, const Address& ad
     return (result);
 }
 
-uint32_t ManagementSocket::RemoveDevice(const Address::type type, const Address& address)
+uint32_t ManagementSocket::RemoveDevice(const Address& address, const Address::type type)
 {
     Management::RemoveDevice message(_deviceId);
     message->addr.type = type;
@@ -775,22 +859,18 @@ uint32_t ManagementSocket::Privacy(const uint8_t mode, const uint8_t identity[16
 {
     uint32_t result = Core::ERROR_NONE;
 
-    if ((mode > 2) || ((mode == 2 /* limited privacy */) && (identity == nullptr))) {
-        TRACE(Trace::Error, (_T("Invalid privacy settings")));
-        return (Core::ERROR_INVALID_SIGNATURE);
-    } else {
-        Management::Privacy message(_deviceId);
-        message->privacy = mode;
-        if (identity != nullptr) {
-            ::memcpy(message->irk, identity, sizeof(message->irk));
-        } else {
-            ::memset(message->irk, 0, sizeof(message->irk));
-        }
+    ASSERT((mode == 0) || (identity != nullptr));
 
-        result = Exchange(MANAGMENT_TIMEOUT, message, message);
-        if ((result == Core::ERROR_NONE) && (message.Result() != MGMT_STATUS_SUCCESS)) {
-            result = Core::ERROR_ASYNC_FAILED;
-        }
+    Management::Privacy message(_deviceId);
+    message->privacy = mode;
+    if ((identity != nullptr) && (mode != 0)) {
+        ::memcpy(message->irk, identity, sizeof(message->irk));
+    }
+
+    result = Exchange(MANAGMENT_TIMEOUT, message, message);
+    if ((result == Core::ERROR_NONE) && (message.Result() != MGMT_STATUS_SUCCESS)) {
+        TRACE(Trace::Error, (_T("SetPrivacy command failed [0x%02x]"), message.Result()));
+        result = Core::ERROR_ASYNC_FAILED;
     }
 
     return (result);
@@ -803,6 +883,7 @@ uint32_t ManagementSocket::Bondable(const bool enabled)
 
     uint32_t result = Exchange(MANAGMENT_TIMEOUT, message, message);
     if ((result == Core::ERROR_NONE) && (message.Result() != MGMT_STATUS_SUCCESS)) {
+        TRACE(Trace::Error, (_T("SetBondable command failed [0x%02x]"), message.Result()));
         result = Core::ERROR_ASYNC_FAILED;
     }
 
@@ -816,6 +897,7 @@ uint32_t ManagementSocket::Advertising(const bool enabled)
 
     uint32_t result = Exchange(MANAGMENT_TIMEOUT, message, message);
     if ((result == Core::ERROR_NONE) && (message.Result() != MGMT_STATUS_SUCCESS)) {
+        TRACE(Trace::Error, (_T("SetAdvertising command failed [0x%02x]"), message.Result()));
         result = Core::ERROR_ASYNC_FAILED;
     }
 
@@ -829,6 +911,7 @@ uint32_t ManagementSocket::SimplePairing(const bool enabled)
 
     uint32_t result = Exchange(MANAGMENT_TIMEOUT, message, message);
     if ((result == Core::ERROR_NONE) && (message.Result() != MGMT_STATUS_SUCCESS)) {
+        TRACE(Trace::Error, (_T("SetSSP command failed [0x%02x]"), message.Result()));
         result = Core::ERROR_ASYNC_FAILED;
     }
 
@@ -842,6 +925,7 @@ uint32_t ManagementSocket::HighSpeed(const bool enabled)
 
     uint32_t result = Exchange(MANAGMENT_TIMEOUT, message, message);
     if ((result == Core::ERROR_NONE) && (message.Result() != MGMT_STATUS_SUCCESS)) {
+        TRACE(Trace::Error, (_T("SetHS command failed [0x%02x]"), message.Result()));
         result = Core::ERROR_ASYNC_FAILED;
     }
 
@@ -855,6 +939,7 @@ uint32_t ManagementSocket::LowEnergy(const bool enabled)
 
     uint32_t result = Exchange(MANAGMENT_TIMEOUT, message, message);
     if ((result == Core::ERROR_NONE) && (message.Result() != MGMT_STATUS_SUCCESS)) {
+        TRACE(Trace::Error, (_T("SetLE command failed [0x%02x]"), message.Result()));
         result = Core::ERROR_ASYNC_FAILED;
     }
 
@@ -868,6 +953,7 @@ uint32_t ManagementSocket::SecureLink(const bool enabled)
 
     uint32_t result = Exchange(MANAGMENT_TIMEOUT, message, message);
     if ((result == Core::ERROR_NONE) && (message.Result() != MGMT_STATUS_SUCCESS)) {
+        TRACE(Trace::Error, (_T("SetSecureLink command failed [0x%02x]"), message.Result()));
         result = Core::ERROR_ASYNC_FAILED;
     }
 
@@ -881,6 +967,7 @@ uint32_t ManagementSocket::SecureConnection(const bool enabled)
 
     uint32_t result = Exchange(MANAGMENT_TIMEOUT, message, message);
     if ((result == Core::ERROR_NONE) && (message.Result() != MGMT_STATUS_SUCCESS)) {
+        TRACE(Trace::Error, (_T("SetSecureConn command failed [0x%02x]"), message.Result()));
         result = Core::ERROR_ASYNC_FAILED;
     }
 
@@ -890,10 +977,11 @@ uint32_t ManagementSocket::SecureConnection(const bool enabled)
 uint32_t ManagementSocket::PublicAddress(const Address& address)
 {
     Management::PublicAddress message(_deviceId);
-    ::memcpy (&(message->bdaddr), address.Data(), sizeof(message->bdaddr));
+    ::memcpy(&(message->bdaddr), address.Data(), sizeof(message->bdaddr));
 
     uint32_t result = Exchange(MANAGMENT_TIMEOUT, message, message);
     if ((result == Core::ERROR_NONE) && (message.Result() != MGMT_STATUS_SUCCESS)) {
+        TRACE(Trace::Error, (_T("SetPublicAddress command failed [0x%02x]"), message.Result()));
         result = Core::ERROR_ASYNC_FAILED;
     }
 
@@ -908,6 +996,7 @@ uint32_t ManagementSocket::LinkKey(const LinkKeys& keys, const bool debugKeys)
 
     uint32_t result = Exchange(MANAGMENT_TIMEOUT, message, message);
     if ((result == Core::ERROR_NONE) && (message.Result() != MGMT_STATUS_SUCCESS)) {
+        TRACE(Trace::Error, (_T("SetLinkKey command failed [0x%02x]"), message.Result()));
         result = Core::ERROR_ASYNC_FAILED;
     }
 
@@ -921,6 +1010,7 @@ uint32_t ManagementSocket::LongTermKey(const LongTermKeys& keys)
 
     uint32_t result = Exchange(MANAGMENT_TIMEOUT, message, message);
     if ((result == Core::ERROR_NONE) && (message.Result() != MGMT_STATUS_SUCCESS)) {
+        TRACE(Trace::Error, (_T("SetLongTermKey command failed [0x%02x]"), message.Result()));
         result = Core::ERROR_ASYNC_FAILED;
     }
 
@@ -934,6 +1024,7 @@ uint32_t ManagementSocket::IdentityKey(const IdentityKeys& keys)
 
     uint32_t result = Exchange(MANAGMENT_TIMEOUT, message, message);
     if ((result == Core::ERROR_NONE) && (message.Result() != MGMT_STATUS_SUCCESS)) {
+        TRACE(Trace::Error, (_T("SetIdentityKey command failed [0x%02x]"), message.Result()));
         result = Core::ERROR_ASYNC_FAILED;
     }
 
@@ -944,7 +1035,7 @@ uint32_t ManagementSocket::Discovering(const bool on, const bool regular, const 
 {
     uint32_t result = Core::ERROR_UNAVAILABLE;
     uint32_t commandResult = MGMT_STATUS_FAILED;
-    uint8_t mode = (regular ? 1 : 0) | (lowEnergy ? 6 : 0);
+    const uint8_t mode = (regular ? 1 : 0) | (lowEnergy ? 6 : 0);
 
     // If you do not select any type, no use calling this method
     ASSERT (mode != 0);
@@ -962,6 +1053,7 @@ uint32_t ManagementSocket::Discovering(const bool on, const bool regular, const 
     }
 
     if ((result == Core::ERROR_NONE) && (commandResult != MGMT_STATUS_SUCCESS)) {
+        TRACE(Trace::Error, (_T("StartDiscovery/StopDiscovery command failed [0x%02x]"), commandResult));
         result = Core::ERROR_ASYNC_FAILED;
     }
 
@@ -984,7 +1076,6 @@ uint32_t ManagementSocket::Pair(const Address& remote, const Address::type type,
 {
     Management::Pair command(_deviceId);
 
-    command.Clear();
     command->addr.bdaddr = *remote.Data();
     command->addr.type = type;
     command->io_cap = cap;
@@ -1014,7 +1105,6 @@ uint32_t ManagementSocket::Unpair(const Address& remote, const Address::type typ
 {
     Management::Unpair command(_deviceId);
 
-    command.Clear();
     command->addr.bdaddr = *remote.Data();
     command->addr.type = type;
     command->disconnect = 1;
@@ -1041,7 +1131,6 @@ uint32_t ManagementSocket::PairAbort(const Address& remote, const Address::type 
 {
     Management::PairAbort command(_deviceId);
 
-    command.Clear();
     command->bdaddr = *remote.Data();
     command->type = type;
 
@@ -1074,16 +1163,14 @@ uint32_t ManagementSocket::UserPINCodeReply(const Address& remote, const Address
 
     if (pinCode.empty() == false) {
         Management::UserPINCodeReply command(_deviceId);
-        command.Clear();
         command->addr.bdaddr = *remote.Data();
         command->addr.type = type;
         command->pin_len = std::max(pinCode.length(), sizeof(command->pin_code));
-        strncpy(reinterpret_cast<char*>(command->pin_code), pinCode.c_str(), sizeof(command->pin_code));
+        ::strncpy(reinterpret_cast<char*>(command->pin_code), pinCode.c_str(), sizeof(command->pin_code));
         result = Exchange(MANAGMENT_TIMEOUT, command, command);
         commandResult = command.Result();
     } else {
         Management::UserPINCodeNegReply command(_deviceId);
-        command.Clear();
         command->addr.bdaddr = *remote.Data();
         command->addr.type = type;
         result = Exchange(MANAGMENT_TIMEOUT, command, command);
@@ -1091,7 +1178,7 @@ uint32_t ManagementSocket::UserPINCodeReply(const Address& remote, const Address
     }
 
     if ((result == Core::ERROR_NONE) && (commandResult != MGMT_STATUS_SUCCESS)) {
-        TRACE(Trace::Error, (_T("UserPINCode(Neg)Reply command failed [0x%02x]"), commandResult));
+        TRACE(Trace::Error, (_T("UserPINCodeReply/UserPINCodeNegReply command failed [0x%02x]"), commandResult));
         result = Core::ERROR_ASYNC_FAILED;
     }
 
@@ -1105,7 +1192,6 @@ uint32_t ManagementSocket::UserPasskeyReply(const Address& remote, const Address
 
     if (passkey != static_cast<uint32_t>(~0)) {
         Management::UserPasskeyReply command(_deviceId);
-        command.Clear();
         command->addr.bdaddr = *remote.Data();
         command->addr.type = type;
         command->passkey = passkey;
@@ -1113,7 +1199,6 @@ uint32_t ManagementSocket::UserPasskeyReply(const Address& remote, const Address
         commandResult = command.Result();
     } else {
         Management::UserPasskeyNegReply command(_deviceId);
-        command.Clear();
         command->addr.bdaddr = *remote.Data();
         command->addr.type = type;
         result = Exchange(MANAGMENT_TIMEOUT, command, command);
@@ -1121,7 +1206,7 @@ uint32_t ManagementSocket::UserPasskeyReply(const Address& remote, const Address
     }
 
     if ((result == Core::ERROR_NONE) && (commandResult != MGMT_STATUS_SUCCESS)) {
-        TRACE(Trace::Error, (_T("UserPass(Neg)Reply command failed [0x%02x]"), commandResult));
+        TRACE(Trace::Error, (_T("UserPassReply/UserPassNegReply command failed [0x%02x]"), commandResult));
         result = Core::ERROR_ASYNC_FAILED;
     }
 
@@ -1135,14 +1220,12 @@ uint32_t ManagementSocket::UserPasskeyConfirmReply(const Address& remote, const 
 
     if (confirm == true) {
         Management::UserConfirmReply command(_deviceId);
-        command.Clear();
         command->addr.bdaddr = *remote.Data();
         command->addr.type = type;
         result = Exchange(MANAGMENT_TIMEOUT, command, command);
         commandResult = command.Result();
     } else {
         Management::UserConfirmNegReply command(_deviceId);
-        command.Clear();
         command->addr.bdaddr = *remote.Data();
         command->addr.type = type;
         result = Exchange(MANAGMENT_TIMEOUT, command, command);
@@ -1150,6 +1233,7 @@ uint32_t ManagementSocket::UserPasskeyConfirmReply(const Address& remote, const 
     }
 
     if ((result == Core::ERROR_NONE) && (commandResult != MGMT_STATUS_SUCCESS)) {
+        TRACE(Trace::Error, (_T("UserConfirmReply/UserConfirmNegReply command failed [0x%02x]"), commandResult));
         result = Core::ERROR_ASYNC_FAILED;
     }
 
@@ -1194,10 +1278,10 @@ uint32_t ManagementSocket::Notifications(const bool enabled)
         }
 
         if (setsockopt(Handle(), SOL_HCI, HCI_FILTER, &_filter, sizeof(_filter)) < 0) {
-            TRACE(Trace::Error, (_T("Can't set filter: %s (%d)"), strerror(errno), errno));
+            TRACE(Trace::Error, (_T("Can't set MGMT filter: %s (%d)"), strerror(errno), errno));
             result = Core::ERROR_GENERAL;
         } else {
-            TRACE(Trace::Information, (_T("Filter set!")));
+            TRACE(Trace::Information, (_T("MGMT Filter set!")));
             result = Core::ERROR_NONE;
         }
     }
@@ -1212,7 +1296,7 @@ uint32_t ManagementSocket::Notifications(const bool enabled)
         const mgmt_hdr* hdr = reinterpret_cast<const mgmt_hdr*>(dataFrame);
         Update(*hdr);
     } else {
-        TRACE_L1(_T("EVT_MGMT: Message too short => (hci_event_hdr)"));
+        TRACE_L1("EVT_MGMT: Message too short => (hci_event_hdr)");
     }
 
     return (availableData);
