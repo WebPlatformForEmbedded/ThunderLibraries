@@ -70,8 +70,10 @@ uint32_t HCISocket::Advertising(const bool enable, const uint8_t mode)
     return (result);
 }
 
-void HCISocket::Scan(const uint16_t scanTime, const bool limited)
+uint32_t HCISocket::Inquiry(const uint16_t scanTime, const bool limited)
 {
+    uint32_t result = Core::ERROR_ILLEGAL_STATE;
+
     _state.Lock();
 
     if ((_state & ACTION_MASK) == 0) {
@@ -109,11 +111,15 @@ void HCISocket::Scan(const uint16_t scanTime, const bool limited)
 
                     Exchange(MAX_ACTION_TIMEOUT, inquiryCancel, inquiryCancel);
                     _state.SetState(static_cast<state>(_state.GetState() & (~(ABORT | SCANNING))));
+
+                    result = Core::ERROR_NONE;
                 } else {
                     TRACE(Trace::Error, (_T("Inquiry command failed [0x%02x]"), inquiry.Response()));
+                    result = Core::ERROR_ASYNC_FAILED;
                     break;
                 }
             } else {
+                result = Core::ERROR_ASYNC_FAILED;
                 break;
             }
         }
@@ -122,10 +128,30 @@ void HCISocket::Scan(const uint16_t scanTime, const bool limited)
     }
 
     _state.Unlock();
+
+    return (result);
 }
 
-void HCISocket::Scan(const uint16_t scanTime, const bool limited, const bool passive)
+uint32_t HCISocket::AbortInquiry()
 {
+    uint32_t result = Core::ERROR_ILLEGAL_STATE;
+
+    _state.Lock();
+
+    if ((_state & ACTION_MASK) == INQUIRING) {
+        _state.SetState(static_cast<state>(_state.GetState() | ABORT));
+        result = Core::ERROR_NONE;
+    }
+
+    _state.Unlock();
+
+    return (result);
+}
+
+uint32_t HCISocket::Scan(const uint16_t scanTime, const bool limited, const bool passive)
+{
+    uint32_t result = Core::ERROR_ILLEGAL_STATE;
+
     _state.Lock();
 
     if ((_state & ACTION_MASK) == 0) {
@@ -159,12 +185,15 @@ void HCISocket::Scan(const uint16_t scanTime, const bool limited, const bool pas
                         Exchange(MAX_ACTION_TIMEOUT, scanner, scanner);
 
                         _state.SetState(static_cast<state>(_state.GetState() & (~(ABORT | SCANNING))));
+                        result = Core::ERROR_NONE;
                     } else {
                         TRACE(Trace::Error, (_T("ScanEnableLE command failed [0x%02x]"), scanner.Response()));
+                        result = Core::ERROR_ASYNC_FAILED;
                     }
                 }
             } else {
                 TRACE(Trace::Error, (_T("ScanParametersLE command failed [0x%02x]"), parameters.Response()));
+                result = Core::ERROR_ASYNC_FAILED;
             }
         }
     } else {
@@ -172,29 +201,36 @@ void HCISocket::Scan(const uint16_t scanTime, const bool limited, const bool pas
     }
 
     _state.Unlock();
+
+    return (result);
 }
 
-void HCISocket::Abort()
+uint32_t HCISocket::AbortScan()
 {
+    uint32_t result = Core::ERROR_ILLEGAL_STATE;
+
     _state.Lock();
 
     if ((_state & ACTION_MASK) == SCANNING) {
         _state.SetState(static_cast<state>(_state.GetState() | ABORT));
+        result = Core::ERROR_NONE;
     }
 
     _state.Unlock();
+
+    return (result);
 }
 
-void HCISocket::Discovery(const bool enable)
+uint32_t HCISocket::Discovery(const bool enable)
 {
+    uint32_t result = Core::ERROR_ILLEGAL_STATE;
+
     _state.Lock();
 
     if ((_state & ACTION_MASK) == 0) {
         if (((enable == true) && (IsDiscovering() == true)) || ((enable == false) && (IsDiscovering() == false))) {
             TRACE_L1("Target LE discovery mode already set...");
         } else {
-            bool result = false;
-
             if (enable == true) {
                 Command::ScanParametersLE parameters;
                 const uint16_t window = 0x10; // 10ms
@@ -208,14 +244,15 @@ void HCISocket::Discovery(const bool enable)
                 uint32_t rv = Exchange(MAX_ACTION_TIMEOUT, parameters, parameters);
                 if (rv == Core::ERROR_NONE) {
                     if (parameters.Response() == 0) {
-                        result = true;
+                        result = Core::ERROR_NONE;
                     } else  {
                         TRACE(Trace::Error, (_T("ScanParametersLE command failed [0x%02x]"), parameters.Response()));
+                        result = Core::ERROR_ASYNC_FAILED;
                     }
                 }
             }
 
-            if ((result == true) || (enable == false)) {
+            if ((result == Core::ERROR_NONE) || (enable == false)) {
                 Command::ScanEnableLE scanner;
                 scanner->enable = enable;
                 scanner->filter_dup = SCAN_FILTER_DUPLICATES_ENABLE;
@@ -223,8 +260,10 @@ void HCISocket::Discovery(const bool enable)
                 if (Exchange(MAX_ACTION_TIMEOUT, scanner, scanner) == Core::ERROR_NONE) {
                     if (scanner.Response() == 0) {
                         _state.SetState(static_cast<state>(enable? (_state.GetState() | DISCOVERING) : (_state.GetState() & (~DISCOVERING))));
+                        result = Core::ERROR_NONE;
                     } else {
                         TRACE(Trace::Error, (_T("ScanEnableLE command failed [0x%02x]"), scanner.Response()));
+                        result = Core::ERROR_ASYNC_FAILED;
                     }
                 }
             }
@@ -234,6 +273,8 @@ void HCISocket::Discovery(const bool enable)
     }
 
     _state.Unlock();
+
+    return (result);
 }
 
 uint32_t HCISocket::ReadStoredLinkKeys(const Address adr, const bool all, LinkKeys& list VARIABLE_IS_NOT_USED)
@@ -624,6 +665,10 @@ namespace Management {
     typedef ManagementFixedType<MGMT_OP_ADD_UUID, mgmt_cp_add_uuid, uint8_t[3]> AddUUID;
     typedef ManagementFixedType<MGMT_OP_REMOVE_UUID, mgmt_cp_remove_uuid, uint8_t[3]> RemoveUUID;
 
+    typedef ManagementFixedType<MGMT_OP_ADD_ADVERTISING, mgmt_cp_add_advertising , mgmt_rp_add_advertising> AddAdvertising;
+    typedef ManagementFixedType<MGMT_OP_REMOVE_ADVERTISING, mgmt_cp_remove_advertising , mgmt_rp_remove_advertising> RemoveAdvertising;
+
+    // Kernel-side discovery and auto-connection
     typedef ManagementFixedType<MGMT_OP_START_DISCOVERY, mgmt_cp_start_discovery, uint8_t> StartDiscovery;
     typedef ManagementFixedType<MGMT_OP_STOP_DISCOVERY, mgmt_cp_stop_discovery, uint8_t> StopDiscovery;
     typedef ManagementFixedType<MGMT_OP_BLOCK_DEVICE, mgmt_cp_block_device, mgmt_addr_info> Block;
@@ -728,6 +773,39 @@ uint32_t ManagementSocket::RemoveUUID(const UUID& uuid)
     uint32_t result = Exchange(MANAGMENT_TIMEOUT, message, message);
     if ((result == Core::ERROR_NONE) && (message.Result() != MGMT_STATUS_SUCCESS)) {
         TRACE(Trace::Error, (_T("RemoveUUID command failed [0x%02x]"), message.Result()));
+        result = Core::ERROR_ASYNC_FAILED;
+    }
+
+    return (result);
+}
+
+uint32_t ManagementSocket::AddAdvertising(const bool limited, const bool connectable, const uint16_t duration)
+{
+    Management::AddAdvertising message(_deviceId);
+    message->instance = 0;
+    message->flags = ((limited? 4 : 2) | (connectable? 1 : 0));
+    message->duration = 0;
+    message->timeout = duration;
+    message->adv_data_len = 0;
+    message->scan_rsp_len = 0;
+
+    uint32_t result = Exchange(MANAGMENT_TIMEOUT, message, message);
+    if ((result == Core::ERROR_NONE) && (message.Result() != MGMT_STATUS_SUCCESS)) {
+        TRACE(Trace::Error, (_T("AddAdvertising command failed [0x%02x]"), message.Result()));
+        result = Core::ERROR_ASYNC_FAILED;
+    }
+
+    return (result);
+}
+
+uint32_t ManagementSocket::RemoveAdvertising()
+{
+    Management::RemoveAdvertising message(_deviceId);
+    message->instance = 0;
+
+    uint32_t result = Exchange(MANAGMENT_TIMEOUT, message, message);
+    if ((result == Core::ERROR_NONE) && (message.Result() != MGMT_STATUS_SUCCESS)) {
+        TRACE(Trace::Error, (_T("RemoveAdvertising command failed [0x%02x]"), message.Result()));
         result = Core::ERROR_ASYNC_FAILED;
     }
 
@@ -890,10 +968,10 @@ uint32_t ManagementSocket::Bondable(const bool enabled)
     return (result);
 }
 
-uint32_t ManagementSocket::Advertising(const bool enabled)
+uint32_t ManagementSocket::Advertising(const bool enabled, const bool connectable)
 {
     Management::Advertising message(_deviceId);
-    message->val = (enabled ? ENABLE_MODE : DISABLE_MODE);
+    message->val = (enabled ? (connectable? 2 : 1) : DISABLE_MODE);
 
     uint32_t result = Exchange(MANAGMENT_TIMEOUT, message, message);
     if ((result == Core::ERROR_NONE) && (message.Result() != MGMT_STATUS_SUCCESS)) {
