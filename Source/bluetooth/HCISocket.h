@@ -597,7 +597,6 @@ namespace Bluetooth {
         static constexpr uint8_t  SCAN_FILTER_DUPLICATES_DISABLE = 0x00;
         static constexpr uint8_t  SCAN_FILTER_DUPLICATES_ENABLE = 0x01;
         static constexpr uint32_t MAX_ACTION_TIMEOUT = 2000; /* 2 Seconds for commands to complete ? */
-        static constexpr uint16_t ACTION_MASK = 0x0FFF;
 
     public:
 
@@ -889,11 +888,14 @@ namespace Bluetooth {
         enum state : uint16_t {
             IDLE        = 0x0000,
             SCANNING    = 0x0001,
-            PAIRING     = 0x0002,
+            INQUIRING   = 0x0002,
+            PAIRING     = 0x0004,
             DISCOVERING = 0x1000,
-            ADVERTISING = 0x4000,
+            ADVERTISING = 0x2000,
             ABORT       = 0x8000
         };
+
+        static constexpr uint16_t ACTION_MASK = 0x0FFF;
 
     public:
         HCISocket(const HCISocket&) = delete;
@@ -915,24 +917,36 @@ namespace Bluetooth {
         }
 
     public:
-        bool IsScanning() const
+        bool IsScanning() const // BLE
         {
             return ((_state & SCANNING) != 0);
         }
-        bool IsAdvertising() const
+        bool IsInquiring() const // BR/EDR
+        {
+            return ((_state & INQUIRING) != 0);
+        }
+        bool IsAdvertising() const // BLE
         {
             return ((_state & ADVERTISING) != 0);
         }
-        bool IsDiscovering() const
+        bool IsDiscovering() const // BR/EDR
         {
             return ((_state & DISCOVERING) != 0);
         }
 
-        uint32_t Advertising(const bool enable, const uint8_t mode = 0);
-        void Scan(const uint16_t scanTime, const bool limited);
-        void Scan(const uint16_t scanTime, const bool limited, const bool passive);
-        void Abort();
-        void Discovery(const bool enable);
+        // User-land advertising
+        uint32_t Advertising(const bool enable, const uint8_t mode);
+
+        // User-land BLE background discovery
+        uint32_t Discovery(const bool enable);
+
+        // BR/EDR scanning
+        uint32_t Inquiry(const uint16_t scanTime, const bool limited);
+        uint32_t AbortInquiry();
+
+        // BLE scanning
+        uint32_t Scan(const uint16_t scanTime, const bool limited, const bool passive);
+        uint32_t AbortScan();
 
         uint32_t ReadStoredLinkKeys(const Address adr, const bool all, LinkKeys& keys);
 
@@ -1222,7 +1236,7 @@ namespace Bluetooth {
                     result = true;
                 }
                 else {
-                    TRACE_L1("Could not bring up the interface [%d]. Error: %d", deviceId, errno);
+                    TRACE_L1("Could not bring down the interface [%d]. Error: %d", deviceId, errno);
                 }
                 ::close(descriptor);
             }
@@ -1238,7 +1252,7 @@ namespace Bluetooth {
         uint32_t Connectable(const bool enabled);
         uint32_t FastConnectable(const bool enabled);
         uint32_t Discoverable(const bool enabled, const bool limited = false, const uint16_t duration = 0 /* infinite */);
-        uint32_t Advertising(bool enabled);
+        uint32_t Advertising(bool enabled, const bool connectable = false);
         uint32_t SimplePairing(bool enabled);
         uint32_t HighSpeed(bool enabled);
         uint32_t LowEnergy(bool enabled);
@@ -1251,6 +1265,11 @@ namespace Bluetooth {
         uint32_t AddUUID(const UUID& uuid, const uint8_t codServiceBits);
         uint32_t RemoveUUID(const UUID& uuid);
 
+        // Prefer this over Advertising(true)
+        uint32_t AddAdvertising(const bool limited = false, const bool connectable = true, const uint16_t duration = 0 /* inifite */);
+        uint32_t RemoveAdvertising();
+
+        // Kernel-side BLE discovery and autoconnection
         uint32_t Discovering(const bool on, const bool regular, const bool LowEnergy);
         uint32_t Block(const Address& address, const Address::type type);
         uint32_t Unblock(const Address& address, const Address::type type);
