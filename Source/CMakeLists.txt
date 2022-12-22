@@ -19,6 +19,8 @@ option(BLUETOOTH
         "Include the bluetooth library." OFF)
 option(BROADCAST
         "Include the broadcasting library." OFF)
+option(COMPOSITOR_BUFFER
+        "Include the compositor buffer library." OFF)
 
 if(BLUETOOTH)
     add_subdirectory(bluetooth)
@@ -26,4 +28,8 @@ endif()
 
 if(BROADCAST)
     add_subdirectory(broadcast)
+endif()
+
+if(COMPOSITOR_BUFFER)
+    add_subdirectory(compositorbuffer)
 endif()
