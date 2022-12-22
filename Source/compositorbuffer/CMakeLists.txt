@@ -27,7 +27,7 @@ set(MODULE_NAME ${NAMESPACE}${PROJECT_NAME})
 
 message("Setup ${MODULE_NAME} v${PROJECT_VERSION}")
 
-option(EXAMPLE_BUFFER "Include an example app." ON)
+option(INSTALL_EXAMPLES "Install the examples." OFF)
 
 find_package(${NAMESPACE}Core REQUIRED)
 
@@ -56,6 +56,4 @@ HeaderOnlyInstallPackageConfig(TARGET ${MODULE_NAME}
 
 HeaderOnlyInstallCMakeConfig(TARGET ${MODULE_NAME} TREAT_AS_NORMAL)
 
-if(EXAMPLE_BUFFER)
-    add_subdirectory(example)
-endif()
+add_subdirectory(example)

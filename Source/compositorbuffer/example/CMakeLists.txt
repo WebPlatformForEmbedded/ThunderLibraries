@@ -29,9 +29,6 @@ target_link_libraries(cb-server PRIVATE
     ${NAMESPACE}Core::${NAMESPACE}Core
     ${NAMESPACE}CompositorBuffer::${NAMESPACE}CompositorBuffer)
 
-install(TARGETS cb-server DESTINATION bin)
-
-
 add_executable(cb-client Client.cpp)
 
 target_link_libraries(cb-client PRIVATE
@@ -40,7 +37,10 @@ target_link_libraries(cb-client PRIVATE
     ${NAMESPACE}Core::${NAMESPACE}Core
     ${NAMESPACE}CompositorBuffer::${NAMESPACE}CompositorBuffer)
 
-install(TARGETS cb-client DESTINATION bin)
+if(INSTALL_EXAMPLES)
+    install(TARGETS cb-server DESTINATION bin)
+    install(TARGETS cb-client DESTINATION bin)
+endif()
 
 
 
