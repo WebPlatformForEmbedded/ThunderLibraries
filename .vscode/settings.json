@@ -1,0 +1,8 @@
+{
+    "cmake.configureOnOpen": false,
+    "cmake.configureSettings": {
+        "BLUETOOTH": "OFF",
+        "BROADCAST": "OFF",
+        "COMPOSITOR_BUFFER": "OFF"
+    }
+}
