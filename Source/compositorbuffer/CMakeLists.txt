@@ -27,7 +27,7 @@ set(MODULE_NAME ${NAMESPACE}${PROJECT_NAME})
 
 message("Setup ${MODULE_NAME} v${PROJECT_VERSION}")
 
-option(INSTALL_EXAMPLES "Install the examples." OFF)
+option(INSTALL_EXAMPLES "Install the examples." ON)
 
 find_package(${NAMESPACE}Core REQUIRED)
 

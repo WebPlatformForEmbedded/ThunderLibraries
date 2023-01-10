@@ -21,25 +21,16 @@ find_package(${NAMESPACE}Definitions REQUIRED)
 find_package(${NAMESPACE}Core REQUIRED)
 find_package(CompileSettingsDebug REQUIRED)
 
-add_executable(cb-server Server.cpp)
+add_executable(cb-test main.cpp)
 
-target_link_libraries(cb-server PRIVATE
-    CompileSettingsDebug::CompileSettingsDebug
-    ${NAMESPACE}Definitions::${NAMESPACE}Definitions
-    ${NAMESPACE}Core::${NAMESPACE}Core
-    ${NAMESPACE}CompositorBuffer::${NAMESPACE}CompositorBuffer)
-
-add_executable(cb-client Client.cpp)
-
-target_link_libraries(cb-client PRIVATE
+target_link_libraries(cb-test PRIVATE
     CompileSettingsDebug::CompileSettingsDebug
     ${NAMESPACE}Definitions::${NAMESPACE}Definitions
     ${NAMESPACE}Core::${NAMESPACE}Core
     ${NAMESPACE}CompositorBuffer::${NAMESPACE}CompositorBuffer)
 
 if(INSTALL_EXAMPLES)
-    install(TARGETS cb-server DESTINATION bin)
-    install(TARGETS cb-client DESTINATION bin)
+    install(TARGETS cb-test DESTINATION bin)
 endif()
 
 

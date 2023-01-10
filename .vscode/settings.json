@@ -3,6 +3,7 @@
     "cmake.configureSettings": {
         "BLUETOOTH": "OFF",
         "BROADCAST": "OFF",
-        "COMPOSITOR_BUFFER": "OFF"
+        "COMPOSITOR_BUFFER": "OFF",
+        "INSTALL_EXAMPLES": "OFF"
     }
 }

@@ -58,7 +58,148 @@ namespace Compositor {
     template <const uint8_t PLANES>
     class BufferType : public ::Compositor::Interfaces::IBuffer, public Core::IResource {
     private:
-        using EventFrame = uint8_t;
+// We need to test this on a 32 bit platform. On 64 bits platforms we do need
+// the data to be written into the eventfd to be 64 bits otherwise it does not
+// respond!
+#if defined(__SIZEOF_POINTER__) && (__SIZEOF_POINTER__ == 8)
+        using EventFrame = uint64_t;
+#else
+        using EventFrame = uint32_t;
+#endif
+
+        // We need some shared space for data to exchange, and to create a lock..
+        class SharedStorage {
+        private:
+            struct PlaneStorage {
+                uint32_t _stride;
+                uint32_t _offset;
+            };
+
+        public:
+            void* operator new(size_t stAllocateBlock, int fd)
+            {
+                void* result = ::mmap(nullptr, stAllocateBlock, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+                return (result != MAP_FAILED ? result : nullptr);
+            }
+            // Somehow Purify gets lost if we do not delete it, overide the delete operator
+            void operator delete(void* stAllocateBlock)
+            {
+                ::munmap(stAllocateBlock, sizeof(struct SharedStorage));
+            }
+
+        public:
+            SharedStorage(SharedStorage&&) = delete;
+            SharedStorage(const SharedStorage&) = delete;
+            SharedStorage& operator=(const SharedStorage&) = delete;
+
+            SharedStorage()
+            {
+            }
+            SharedStorage(const uint32_t width, const uint32_t height, const uint32_t format, const uint64_t modifier)
+                : _width(width)
+                , _height(height)
+                , _format(format)
+                , _modifier(modifier)
+                , _dirty()
+                , _copyOfDirty(false)
+            {
+                if (::pthread_mutex_init(&_mutex, nullptr) != 0) {
+                    // That will be the day, if this fails...
+                    ASSERT(false);
+                }
+            }
+            ~SharedStorage()
+            {
+#ifdef __WINDOWS__
+                ::CloseHandle(&(_mutex));
+#else
+                ::pthread_mutex_destroy(&(_mutex));
+#endif
+            }
+
+        public:
+            uint32_t Width() const
+            {
+                return (_width);
+            }
+            uint32_t Height() const
+            {
+                return (_height);
+            }
+            uint32_t Format() const
+            {
+                return (_format);
+            }
+            uint32_t Modifier() const
+            {
+                return (_modifier);
+            }
+            uint32_t Stride(const uint8_t index) const
+            { // Bytes per row for a plane [(bit-per-pixel/8) * width]
+                return (_planes[index]._stride);
+            }
+            uint32_t Offset(const uint8_t index) const
+            { // Offset of the plane from where the pixel data starts in the buffer.
+                return (_planes[index]._offset);
+            }
+            void Add(uint8_t index, const uint32_t stride, const uint32_t offset)
+            {
+                _planes[index]._stride = stride;
+                _planes[index]._offset = offset;
+            }
+            bool Dirty()
+            {
+                _copyOfDirty = false;
+                return (_dirty.test_and_set() == false);
+            }
+            bool IsDirty()
+            {
+                return (_copyOfDirty);
+            }
+            void Set()
+            {
+                _dirty.clear();
+                _copyOfDirty = true;
+            }
+            uint32_t Lock(uint32_t timeout)
+            {
+                timespec structTime;
+
+#ifdef __WINDOWS__
+                return (::WaitForSingleObjectEx(&_mutex, timeout, FALSE) == WAIT_OBJECT_0 ? Core::ERROR_NONE : Core::ERROR_TIMEDOUT);
+#else
+                clock_gettime(CLOCK_MONOTONIC, &structTime);
+                structTime.tv_nsec += ((timeout % 1000) * 1000 * 1000); /* remainder, milliseconds to nanoseconds */
+                structTime.tv_sec += (timeout / 1000) + (structTime.tv_nsec / 1000000000); /* milliseconds to seconds */
+                structTime.tv_nsec = structTime.tv_nsec % 1000000000;
+                int result = pthread_mutex_timedlock(&_mutex, &structTime);
+                return (result == 0 ? Core::ERROR_NONE : Core::ERROR_TIMEDOUT);
+#endif
+            }
+            uint32_t Unlock()
+            {
+#ifdef __WINDOWS__
+                ::LeaveCriticalSection(&_mutex);
+#else
+                pthread_mutex_unlock(&_mutex);
+#endif
+                return (Core::ERROR_NONE);
+            }
+
+        private:
+            uint32_t _width;
+            uint32_t _height;
+            uint32_t _format;
+            uint64_t _modifier;
+            PlaneStorage _planes[PLANES];
+#ifdef __WINDOWS__
+            CRITICAL_SECTION _mutex;
+#else
+            pthread_mutex_t _mutex;
+#endif
+            std::atomic_flag _dirty;
+            bool _copyOfDirty;
+        };
 
         class Iterator : public ::Compositor::Interfaces::IBuffer::IIterator {
         private:
@@ -84,17 +225,19 @@ namespace Compositor {
                 buffer_id Accessor() const override
                 { // Access to the actual data.
                     ASSERT(_parent != nullptr);
-                    return (_parent->FileDescriptor(_index));
+                    return (_parent->Accessor(_index));
                 }
                 uint32_t Stride() const override
                 { // Bytes per row for a plane [(bit-per-pixel/8) * width]
                     ASSERT(_parent != nullptr);
-                    return (_parent->Stride(_index));
+                    ASSERT(_parent->_storage != nullptr);
+                    return (_parent->_storage->Stride(_index));
                 }
                 uint32_t Offset() const override
                 { // Offset of the plane from where the pixel data starts in the buffer.
                     ASSERT(_parent != nullptr);
-                    return (_parent->Offset(_index));
+                    ASSERT(_parent->_storage != nullptr);
+                    return (_parent->_storage->Offset(_index));
                 }
 
             private:
@@ -112,7 +255,7 @@ namespace Compositor {
                 : _parent(parent)
             {
                 // Fill our elements
-                for (uint8_t index = 0; index < _parent.Planes(); index++) {
+                for (uint8_t index = 0; index < PLANES; index++) {
                     _planes[index].Define(_parent, index);
                 }
 
@@ -131,7 +274,7 @@ namespace Compositor {
             }
             bool Next() override
             {
-                if (_position <= _parent->Planes()) {
+                if (_position <= _parent.Planes()) {
                     _position++;
                 }
                 return (IsValid());
@@ -169,49 +312,47 @@ namespace Compositor {
                 /* Size the file as specified by our struct. */
                 if (::ftruncate(_virtualFd, length) != -1) {
                     /* map that file to a memory area we can directly access as a memory mapped file */
-                    _storage = reinterpret_cast<struct SharedStorage*>(::mmap(nullptr, length, PROT_READ | PROT_WRITE, MAP_SHARED, _virtualFd, 0));
-                    if (_storage != MAP_FAILED) {
-                        _eventFd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK | EFD_SEMAPHORE);
-                        if (_eventFd != -1) {
-                            ::memset(_storage, 0, length);
-                            _storage->_width = width;
-                            _storage->_height = height;
-                            _storage->_format = format;
-                            _storage->_modifier = modifier;
-                            _storage->_dirty = ATOMIC_FLAG_INIT;
-                            if (::pthread_mutex_init(&(_storage->_mutex), nullptr) != 0) {
-                                // That will be the day, if this fails...
-                                ASSERT(false);
-                            }
-                        }
+                    _storage = new (_virtualFd) SharedStorage(width, height, format, modifier);
+                    if (_storage != nullptr) {
+                        _eventFd = ::eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK | EFD_SEMAPHORE);
                     }
                 }
             }
         }
-        BufferType(const uint32_t id, const Core::PrivilegedRequest::Container& descriptors)
+        BufferType(const uint32_t id, Core::PrivilegedRequest::Container& descriptors)
             : _id(id)
             , _planeCount(0)
             , _iterator(*this)
-            , _virtualFd(descriptors[0])
-            , _eventFd(descriptors[1])
+            , _virtualFd(-1)
+            , _eventFd(-1)
             , _storage(nullptr)
         {
             ASSERT(descriptors.size() >= 3);
-            ASSERT(_virtualFd != -1);
-            ASSERT(_eventFd != -1);
 
-            _storage = reinterpret_cast<struct SharedStorage*>(::mmap(nullptr, sizeof(struct SharedStorage), PROT_READ | PROT_WRITE, MAP_SHARED, _virtualFd, 0));
-            if (_storage == MAP_FAILED) {
-                ::close(_eventFd);
-                _eventFd = -1;
-                for (const auto& entry : descriptors) {
-                    ::close(entry);
+            if (descriptors.size() >= 3) {
+                Core::PrivilegedRequest::Container::iterator index(descriptors.begin());
+
+                _virtualFd = index->Move();
+                index++;
+
+                ASSERT(_virtualFd != -1);
+
+                _storage = new (_virtualFd) SharedStorage();
+                if (_storage == nullptr) {
+                    ::close(_virtualFd);
+                } else {
+                    _eventFd = index->Move();
+                    index++;
+
+                    ASSERT(_eventFd != -1);
+
+                    while ((index != descriptors.end()) && (_planeCount < PLANES)) {
+                        _planes[_planeCount] = index->Move();
+                        index++;
+                        _planeCount++;
+                    }
                 }
-            } else
-                for (const auto& entry : descriptors) {
-                    _planes[_planeCount] = entry;
-                    _planeCount++;
-                }
+            }
         }
         ~BufferType() override
         {
@@ -220,15 +361,9 @@ namespace Compositor {
                 _eventFd = -1;
 
                 ASSERT(_storage != nullptr);
-
-#ifdef __WINDOWS__
-                ::CloseHandle(&(_storage->_mutex));
-#else
-                ::pthread_mutex_destroy(&(_storage->_mutex));
-#endif
             }
             if (_storage != nullptr) {
-                ::munmap(_storage, sizeof(struct SharedStorage));
+                delete _storage;
                 _storage = nullptr;
             }
             if (_virtualFd != -1) {
@@ -247,12 +382,20 @@ namespace Compositor {
         {
             return (_eventFd != -1);
         }
-        Core::PrivilegedRequest::Container Descriptors() const
+        uint8_t Descriptors(const uint8_t maxSize, int container[]) const
         {
             ASSERT(IsValid() == true);
-            Core::PrivilegedRequest::Container result({ _virtualFd, _eventFd });
-            for (uint8_t index = 0; index < _planeCount; index++) {
-                result.emplace_back(_planes[index]);
+            ASSERT(maxSize > 2);
+            uint8_t result = 0;
+
+            if (maxSize > 2) {
+                container[0] = _virtualFd;
+                container[1] = _eventFd;
+                uint8_t count = std::min(_planeCount, static_cast<uint8_t>(maxSize - 2));
+                for (uint8_t index = 0; (index < count); index++) {
+                    container[index + 2] = _planes[index];
+                }
+                result = 2 + count;
             }
             return (result);
         }
@@ -271,18 +414,16 @@ namespace Compositor {
         void Handle(const uint16_t events) override
         {
             EventFrame value;
-            if (((events & POLLIN) != 0) && (::read(_eventFd, &value, sizeof(EventFrame)) == sizeof(EventFrame)) && (_storage->test_and_set() == false)) {
-                // This is a communication thread, do not wait for more then 10mS to get the lock,
-                // If we do not get it, just bail out..
-                if (Lock(10) == Core::ERROR_NONE) {
+
+            if (((events & POLLIN) != 0) && (::read(_eventFd, &value, sizeof(EventFrame)) == sizeof(EventFrame))) {
+                if (_storage->Dirty() == true) {
                     Render();
-                    Unlock();
                 }
             }
         }
 
         //
-        // Implementation of Core::IResource
+        // Implementation of Core::IBuffer
         // -----------------------------------------------------------------
         // Wait time in milliseconds.
         IIterator* Planes(const uint32_t waitTimeInMs) override
@@ -298,13 +439,12 @@ namespace Compositor {
             Unlock();
             if (dirty == true) {
                 EventFrame value = 1;
-                _storage->_dirty.clear();
-                size_t result = ::write(_storage->_eventFd, &value, sizeof(value));
+                _storage->Set();
+                size_t result = ::write(_eventFd, &value, sizeof(value));
                 return (result != sizeof(value) ? Core::ERROR_ILLEGAL_STATE : Core::ERROR_NONE);
             }
             return (Core::ERROR_NONE);
         }
-        virtual void Render() = 0;
 
         uint32_t Identifier() const override
         {
@@ -312,23 +452,32 @@ namespace Compositor {
         }
         uint32_t Width() const override
         { // Width of the allocated buffer in pixels
-            return (_storage->_width);
+            ASSERT(_storage != nullptr);
+            return (_storage->Width());
         }
         uint32_t Height() const override
         { // Height of the allocated buffer in pixels
-            return (_storage->_height);
+            ASSERT(_storage != nullptr);
+            return (_storage->Height());
         }
         uint32_t Format() const override
         { // Layout of a pixel according the fourcc format
-            return (_storage->_format);
+            ASSERT(_storage != nullptr);
+            return (_storage->Format());
         }
         uint64_t Modifier() const override
         { // Pixel arrangement in the buffer, used to optimize for hardware
-            return (_storage->_modifier);
+            ASSERT(_storage != nullptr);
+            return (_storage->Modifier());
         }
         uint8_t Planes() const
         {
             return (_planeCount);
+        }
+        bool IsDirty() const
+        {
+            ASSERT(_storage != nullptr);
+            return (_storage->IsDirty());
         }
 
     protected:
@@ -336,9 +485,8 @@ namespace Compositor {
         {
             ASSERT(fd > 0);
             ASSERT((_planeCount + 1) <= PLANES);
-            _storage->_planes[_planeCount]._stride = stride;
-            _storage->_planes[_planeCount]._offset = offset;
-            _planes[_planeCount] = fd;
+            _storage->Add(_planeCount, stride, offset);
+            _planes[_planeCount] = ::dup(fd);
             _planeCount++;
         }
 
@@ -348,61 +496,16 @@ namespace Compositor {
             ASSERT(index < _planeCount);
             return (_planes[index]);
         }
-        uint32_t Stride(const uint8_t index) const
-        { // Bytes per row for a plane [(bit-per-pixel/8) * width]
-            ASSERT(index < _planeCount);
-            return (_storage->_planes[index]._stride);
-        }
-        uint32_t Offset(const uint8_t index) const
-        { // Offset of the plane from where the pixel data starts in the buffer.
-            ASSERT(index < _planeCount);
-            return (_storage->_planes[index]._offset);
-        }
-        uint32_t Lock(uint32_t timeout)
+        uint32_t Lock(const uint32_t timeout)
         {
-            timespec structTime;
-
-#ifdef __WINDOWS__
-            return (::WaitForSingleObjectEx(&(_storage->_mutex), timeout, FALSE) == WAIT_OBJECT_0 ? Core::ERROR_NONE : Core::ERROR_TIMEDOUT);
-#else
-            clock_gettime(CLOCK_MONOTONIC, &structTime);
-            structTime.tv_nsec += ((timeout % 1000) * 1000 * 1000); /* remainder, milliseconds to nanoseconds */
-            structTime.tv_sec += (timeout / 1000) + (structTime.tv_nsec / 1000000000); /* milliseconds to seconds */
-            structTime.tv_nsec = structTime.tv_nsec % 1000000000;
-            int result = pthread_mutex_timedlock(&(_storage->_mutex), &structTime);
-            return (result == 0 ? Core::ERROR_NONE : Core::ERROR_TIMEDOUT);
-#endif
+            return (_storage->Lock(timeout));
         }
-        uint32_t Unlock() const
+        uint32_t Unlock()
         {
-#ifdef __WINDOWS__
-            ::LeaveCriticalSection(&_storage->_mutex);
-#else
-            pthread_mutex_unlock(&(_storage->_mutex));
-#endif
-            return (Core::ERROR_NONE);
+            return (_storage->Unlock());
         }
 
     private:
-        struct PlaneStorage {
-            uint32_t _stride;
-            uint32_t _offset;
-        };
-        // We need some shared space for data to exchange, and to create a lock..
-        struct SharedStorage {
-            uint32_t _width;
-            uint32_t _height;
-            uint32_t _format;
-            uint64_t _modifier;
-            PlaneStorage _planes[PLANES];
-#ifdef __WINDOWS__
-            CRITICAL_SECTION _mutex;
-#else
-            pthread_mutex_t _mutex;
-#endif
-            std::atomic_flag _dirty;
-        };
-
         uint32_t _id;
         uint8_t _planeCount;
         Iterator _iterator;
