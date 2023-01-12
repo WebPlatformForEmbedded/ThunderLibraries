@@ -1,7 +1,7 @@
 # If not stated otherwise in this file or this component's license file the
 # following copyright and licenses apply:
 #
-# Copyright 2020 Metrological
+# Copyright 2022 Metrological
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,27 +15,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-option(BLUETOOTH
-        "Include the bluetooth library." OFF)
-option(BROADCAST
-        "Include the broadcasting library." OFF)
-option(COMPOSITOR_BUFFER
-        "Include the compositor buffer library." OFF)
-option(PRIVILEDGED_REQUEST
-        "Include the priviledged request library." OFF)
+find_package(WPEFramework REQUIRED)
 
-if(BLUETOOTH)
-    add_subdirectory(bluetooth)
-endif()
+find_package(${NAMESPACE}Definitions REQUIRED)
+find_package(${NAMESPACE}Core REQUIRED)
+find_package(CompileSettingsDebug REQUIRED)
 
-if(BROADCAST)
-    add_subdirectory(broadcast)
-endif()
+add_executable(fdpassing main.cpp)
 
-if(COMPOSITOR_BUFFER)
-    add_subdirectory(compositorbuffer)
-endif()
+target_link_libraries(fdpassing PRIVATE
+    CompileSettingsDebug::CompileSettingsDebug
+    ${NAMESPACE}Definitions::${NAMESPACE}Definitions
+    ${NAMESPACE}Core::${NAMESPACE}Core
+    ${NAMESPACE}PrivilegedRequest::${NAMESPACE}PrivilegedRequest
+)
 
-if(PRIVILEDGED_REQUEST)
-    add_subdirectory(privilegedrequest)
+if(INSTALL_EXAMPLES)
+install(TARGETS fdpassing DESTINATION bin)
 endif()
