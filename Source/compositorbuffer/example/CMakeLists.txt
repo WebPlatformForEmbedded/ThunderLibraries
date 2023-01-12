@@ -27,6 +27,7 @@ target_link_libraries(cb-test PRIVATE
     CompileSettingsDebug::CompileSettingsDebug
     ${NAMESPACE}Definitions::${NAMESPACE}Definitions
     ${NAMESPACE}Core::${NAMESPACE}Core
+    ${NAMESPACE}PrivilegedRequest::${NAMESPACE}PrivilegedRequest
     ${NAMESPACE}CompositorBuffer::${NAMESPACE}CompositorBuffer)
 
 if(INSTALL_EXAMPLES)

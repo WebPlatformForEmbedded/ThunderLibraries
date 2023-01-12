@@ -45,6 +45,7 @@
 #endif
 
 #include <core/core.h>
+#include <privilegedrequest/PrivilegedRequest.h>
 
 #include "IBuffer.h"
 
