@@ -1,9 +1,10 @@
 {
     "cmake.configureOnOpen": false,
     "cmake.configureSettings": {
+        "INSTALL_EXAMPLES": "OFF",
         "BLUETOOTH": "OFF",
         "BROADCAST": "OFF",
         "COMPOSITOR_BUFFER": "OFF",
-        "INSTALL_EXAMPLES": "OFF"
+        "PRIVILEDGED_REQUEST": "OFF"
     }
 }
