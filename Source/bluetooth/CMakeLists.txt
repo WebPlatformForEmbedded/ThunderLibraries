@@ -19,7 +19,7 @@ cmake_minimum_required(VERSION 3.3)
 
 find_package(WPEFramework)
 find_package(${NAMESPACE}Core REQUIRED)
-find_package(${NAMESPACE}Tracing REQUIRED)
+find_package(${NAMESPACE}Messaging REQUIRED)
 find_package(CompileSettingsDebug CONFIG REQUIRED)
 
 project(${NAMESPACE}Bluetooth)
@@ -78,7 +78,7 @@ target_link_libraries(${TARGET}
         PRIVATE
           CompileSettingsDebug::CompileSettingsDebug
           ${NAMESPACE}Core::${NAMESPACE}Core
-          ${NAMESPACE}Tracing::${NAMESPACE}Tracing
+          ${NAMESPACE}Messaging::${NAMESPACE}Messaging
           Bluez5UtilHeaders::Bluez5UtilHeaders
         )
 
