@@ -76,7 +76,7 @@ uint32_t HCISocket::Inquiry(const uint16_t scanTime, const bool limited)
 
     _state.Lock();
 
-    if ((_state & ACTION_MASK) == 0) {
+    if (((_state & ACTION_MASK) == 0) || ((_state & ACTION_MASK) == SCANNING)) {
         /* The inquiry API limits the scan time to 326 seconds, so split it into mutliple inquiries if neccessary. */
         const uint16_t lapTime = 30; /* sec */
         uint16_t timeLeft = scanTime;
@@ -96,13 +96,13 @@ uint32_t HCISocket::Inquiry(const uint16_t scanTime, const bool limited)
         while (timeLeft > 0) {
             if (Exchange(MAX_ACTION_TIMEOUT, inquiry, inquiry) == Core::ERROR_NONE) {
                 if (inquiry.Response() == 0) {
-                    _state.SetState(static_cast<state>(_state.GetState() | SCANNING));
+                    _state.SetState(static_cast<state>(_state.GetState() | INQUIRING));
 
                     _state.Unlock();
 
                     // This is not super-precise, but it doesn't have to be.
                     uint16_t roundTime = (timeLeft > lapTime? lapTime : timeLeft);
-                    if (_state.WaitState(ABORT, (roundTime * 1000)) == true) {
+                    if (_state.WaitState(ABORT_INQUIRING, (roundTime * 1000)) == true) {
                         roundTime = timeLeft; // essentially break
                     }
                     timeLeft -= roundTime;
@@ -110,7 +110,7 @@ uint32_t HCISocket::Inquiry(const uint16_t scanTime, const bool limited)
                     _state.Lock();
 
                     Exchange(MAX_ACTION_TIMEOUT, inquiryCancel, inquiryCancel);
-                    _state.SetState(static_cast<state>(_state.GetState() & (~(ABORT | SCANNING))));
+                    _state.SetState(static_cast<state>(_state.GetState() & (~(ABORT_INQUIRING | INQUIRING))));
 
                     result = Core::ERROR_NONE;
                 } else {
@@ -124,7 +124,7 @@ uint32_t HCISocket::Inquiry(const uint16_t scanTime, const bool limited)
             }
         }
     } else {
-        TRACE_L1("Busy, controller is now scanning or pairing");
+        TRACE_L1("Busy, controller is now inquiring or pairing");
     }
 
     _state.Unlock();
@@ -138,8 +138,8 @@ uint32_t HCISocket::AbortInquiry()
 
     _state.Lock();
 
-    if ((_state & ACTION_MASK) == INQUIRING) {
-        _state.SetState(static_cast<state>(_state.GetState() | ABORT));
+    if ((_state & INQUIRING) != 0) {
+        _state.SetState(static_cast<state>(_state.GetState() | ABORT_INQUIRING));
         result = Core::ERROR_NONE;
     }
 
@@ -154,7 +154,7 @@ uint32_t HCISocket::Scan(const uint16_t scanTime, const bool limited, const bool
 
     _state.Lock();
 
-    if ((_state & ACTION_MASK) == 0) {
+    if (((_state & ACTION_MASK) == 0) ||  ((_state & ACTION_MASK) == INQUIRING)) {
         Command::ScanParametersLE parameters;
         const uint16_t window = (limited? 0x12 : 0x10 /* 10ms */);
         // Make sure window is smaller than interval, so the link layer has time for other Bluetooth operations during scanning.
@@ -177,14 +177,14 @@ uint32_t HCISocket::Scan(const uint16_t scanTime, const bool limited, const bool
                         // Now lets wait for the scanning period..
                         _state.Unlock();
 
-                        _state.WaitState(ABORT, scanTime * 1000);
+                        _state.WaitState(ABORT_SCANNING, scanTime * 1000);
 
                         _state.Lock();
 
                         scanner->enable = 0;
                         Exchange(MAX_ACTION_TIMEOUT, scanner, scanner);
 
-                        _state.SetState(static_cast<state>(_state.GetState() & (~(ABORT | SCANNING))));
+                        _state.SetState(static_cast<state>(_state.GetState() & (~(ABORT_SCANNING | SCANNING))));
                         result = Core::ERROR_NONE;
                     } else {
                         TRACE(Trace::Error, (_T("ScanEnableLE command failed [0x%02x]"), scanner.Response()));
@@ -211,8 +211,8 @@ uint32_t HCISocket::AbortScan()
 
     _state.Lock();
 
-    if ((_state & ACTION_MASK) == SCANNING) {
-        _state.SetState(static_cast<state>(_state.GetState() | ABORT));
+    if ((_state & SCANNING) != 0) {
+        _state.SetState(static_cast<state>(_state.GetState() | ABORT_SCANNING));
         result = Core::ERROR_NONE;
     }
 
@@ -779,10 +779,10 @@ uint32_t ManagementSocket::RemoveUUID(const UUID& uuid)
     return (result);
 }
 
-uint32_t ManagementSocket::AddAdvertising(const bool limited, const bool connectable, const uint16_t duration)
+uint32_t ManagementSocket::AddAdvertising(uint8_t& instance, const bool limited, const bool connectable, const uint16_t duration)
 {
     Management::AddAdvertising message(_deviceId);
-    message->instance = 0;
+    message->instance = 1; // only one advertising at a time
     message->flags = ((limited? 4 : 2) | (connectable? 1 : 0));
     message->duration = 0;
     message->timeout = duration;
@@ -793,6 +793,8 @@ uint32_t ManagementSocket::AddAdvertising(const bool limited, const bool connect
     if ((result == Core::ERROR_NONE) && (message.Result() != MGMT_STATUS_SUCCESS)) {
         TRACE(Trace::Error, (_T("AddAdvertising command failed [0x%02x]"), message.Result()));
         result = Core::ERROR_ASYNC_FAILED;
+    } else {
+        instance = message->instance;
     }
 
     return (result);
