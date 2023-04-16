@@ -892,7 +892,8 @@ namespace Bluetooth {
             PAIRING     = 0x0004,
             DISCOVERING = 0x1000,
             ADVERTISING = 0x2000,
-            ABORT       = 0x8000
+            ABORT_SCANNING = 0x4000,
+            ABORT_INQUIRING = 0x8000
         };
 
         static constexpr uint16_t ACTION_MASK = 0x0FFF;
@@ -1266,7 +1267,7 @@ namespace Bluetooth {
         uint32_t RemoveUUID(const UUID& uuid);
 
         // Prefer this over Advertising(true)
-        uint32_t AddAdvertising(const bool limited = false, const bool connectable = true, const uint16_t duration = 0 /* inifite */);
+        uint32_t AddAdvertising(uint8_t& instance, const bool limited = false, const bool connectable = true, const uint16_t duration = 0 /* inifite */);
         uint32_t RemoveAdvertising();
 
         // Kernel-side BLE discovery and autoconnection
