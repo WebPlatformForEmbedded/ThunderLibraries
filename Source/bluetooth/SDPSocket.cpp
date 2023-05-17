@@ -28,6 +28,7 @@ namespace SDP {
 
     void Payload::PushDescriptor(const elementtype type, const uint32_t size)
     {
+        ASSERT(_buffer != nullptr);
         ASSERT(Free() >= 1);
 
         uint8_t* buffer = &_buffer[_writerOffset];
@@ -36,58 +37,58 @@ namespace SDP {
         buffer[offset++] = (type | SIZE_8);
 
         switch (type) {
-            case NIL:
-                ASSERT(size == 0);
-                // Exception: even if size descriptor says BYTE, for NIL type there's no data following.
-                break;
-            case BOOL:
-                ASSERT(size == 1);
-                break;
-            case INT:
-            case UINT:
-                if (size == 1) {
-                    // already set
-                } else if (size == 2) {
-                    buffer[0] |= SIZE_16;
-                } else if (size == 4) {
-                    buffer[0] |= SIZE_32;
-                } else if (size == 8) {
-                    buffer[0] |= SIZE_64;
-                } else {
-                    ASSERT(false && "Invalid INT size");
-                }
-                break;
-            case UUID:
-                if (size == 2) {
-                    buffer[0] |= SIZE_16;
-                } else if (size == 4) {
-                    buffer[0] |= SIZE_32;
-                } else if (size == 16) {
-                    buffer[0] |= SIZE_128;
-                } else {
-                    ASSERT(false && "Invalid UUID size");
-                }
-                break;
-            case TEXT:
-            case SEQ:
-            case ALT:
-            case URL:
-                if (size <= 0xFF) {
-                    ASSERT(Free() >= 1);
-                    buffer[0] |= SIZE_U8_FOLLOWS;
-                } else if (size <= 0xFFFF) {
-                    ASSERT(Free() >= 2);
-                    buffer[0] |= SIZE_U16_FOLLOWS;
-                    buffer[offset++] = (size >> 8);
-                } else {
-                    ASSERT(Free() >= 4);
-                    buffer[0] |= SIZE_U32_FOLLOWS;
-                    buffer[offset++] = (size >> 24);
-                    buffer[offset++] = (size >> 16);
-                    buffer[offset++] = (size >> 8);
-                }
-                buffer[offset++] = size;
-                break;
+        case NIL:
+            ASSERT(size == 0);
+            // Exception: even if size descriptor says BYTE, for NIL type there's no data following.
+            break;
+        case BOOL:
+            ASSERT(size == 1);
+            break;
+        case INT:
+        case UINT:
+            if (size == 1) {
+                // already set
+            } else if (size == 2) {
+                buffer[0] |= SIZE_16;
+            } else if (size == 4) {
+                buffer[0] |= SIZE_32;
+            } else if (size == 8) {
+                buffer[0] |= SIZE_64;
+            } else {
+                ASSERT(false && "Invalid INT size");
+            }
+            break;
+        case UUID:
+            if (size == 2) {
+                buffer[0] |= SIZE_16;
+            } else if (size == 4) {
+                buffer[0] |= SIZE_32;
+            } else if (size == 16) {
+                buffer[0] |= SIZE_128;
+            } else {
+                ASSERT(false && "Invalid UUID size");
+            }
+            break;
+        case TEXT:
+        case SEQ:
+        case ALT:
+        case URL:
+            if (size <= 0xFF) {
+                ASSERT(Free() >= 1);
+                buffer[0] |= SIZE_U8_FOLLOWS;
+            } else if (size <= 0xFFFF) {
+                ASSERT(Free() >= 2);
+                buffer[0] |= SIZE_U16_FOLLOWS;
+                buffer[offset++] = (size >> 8);
+            } else {
+                ASSERT(Free() >= 4);
+                buffer[0] |= SIZE_U32_FOLLOWS;
+                buffer[offset++] = (size >> 24);
+                buffer[offset++] = (size >> 16);
+                buffer[offset++] = (size >> 8);
+            }
+            buffer[offset++] = size;
+            break;
         }
 
         _writerOffset += offset;
@@ -206,7 +207,7 @@ namespace SDP {
 
             // Pick up the payload, but not process it yet, wait until the chain of continued packets ends.
             params.Pop(currentCount);
-            params.Peek(payload, (currentCount * sizeof(uint32_t)));
+            params.PopAssign(payload, (currentCount * sizeof(uint32_t)));
             _payload.Push(payload);
 
             // Get continuation data.
@@ -240,7 +241,7 @@ namespace SDP {
 
             // Pick up the payload, but not process it yet, wait until the chain of continued packets ends.
             params.Pop(byteCount);
-            params.Peek(payload, byteCount);
+            params.PopAssign(payload, byteCount);
             _payload.Push(payload);
 
             // Get continuation data.
@@ -296,6 +297,9 @@ namespace SDP {
                 case PDU::ServiceSearchRequest:
                     _status = DeserializeServiceSearchRequest(parameters);
                     break;
+                case PDU::ServiceAttributeRequest:
+                    _status = DeserializeServiceAttributeRequest(parameters);
+                    break;
                 case PDU::ServiceSearchAttributeRequest:
                     _status = DeserializeServiceSearchAttributeRequest(parameters);
                     break;
@@ -339,6 +343,7 @@ namespace SDP {
 
             Payload::Continuation cont;
             params.Pop(cont, _continuationData);
+
             if (cont != Payload::Continuation::ABSENT) {
                 // TODO: Add continuation support to the server.
                 ASSERT(false && "Unexpected Continuation data as not supported in SDP server");
@@ -346,6 +351,61 @@ namespace SDP {
             } else {
                 result = PDU::Success;
                 _server.OnServiceSearch(_transactionId, services, maxServiceCount);
+            }
+        } else {
+            TRACE_L1("Truncated payload in ServiceSearchResponse [%d]", params.Length());
+        }
+
+        if (result != PDU::Success) {
+            _server.OnError(_transactionId, result);
+        }
+
+        return (result);
+    }
+
+    ServerSocket::PDU::errorid SDP::ServerSocket::Request::DeserializeServiceAttributeRequest(const Payload& params)
+    {
+        // ServiceAttributeRequest frame format:
+        // - ServiceRecordHandle (long)
+        // - MaximumAttributeByteCount (word)
+        // - ContinuationState
+
+        PDU::errorid result = PDU::InvalidRequestSyntax;
+
+        if (params.Length() >= 6) {
+            uint32_t handle;
+            uint16_t maxByteCount;
+            std::list<uint32_t> attributeRanges;
+
+            params.Pop(handle); // no descriptor!
+            params.Pop(maxByteCount); // no descriptor!
+
+            params.Pop(use_descriptor, [&](const Payload& sequence) {
+                while (sequence.Available() > 0) {
+                    uint32_t range{};
+                    uint32_t size{};
+
+                    sequence.Pop(use_descriptor, range, &size);
+
+                    if (size == 4) {
+                        attributeRanges.push_back(range);
+                    } else {
+                        // Not a range, but single 16-bit UUID
+                        attributeRanges.push_back((static_cast<uint16_t>(range) << 16) | static_cast<uint16_t>(range));
+                    }
+                }
+            });
+
+            Payload::Continuation cont;
+            params.Pop(cont, _continuationData);
+
+            if (cont != Payload::Continuation::ABSENT) {
+                // TODO: Add continuation support to the server.
+                ASSERT(false && "Unexpected Continuation data as not supported in SDP server");
+                result = PDU::InvalidContinuationState;
+            } else {
+                result = PDU::Success;
+                _server.OnServiceAttribute(_transactionId, handle, maxByteCount, attributeRanges);
             }
         } else {
             TRACE_L1("Truncated payload in ServiceAttributeResponse [%d]", params.Length());
@@ -387,7 +447,9 @@ namespace SDP {
                 while (sequence.Available() > 0) {
                     uint32_t range{};
                     uint32_t size{};
+
                     sequence.Pop(use_descriptor, range, &size);
+
                     if (size == 4) {
                         attributeRanges.push_back(range);
                     } else {
@@ -399,6 +461,7 @@ namespace SDP {
 
             Payload::Continuation cont;
             params.Pop(cont, _continuationData);
+
             if (cont != Payload::Continuation::ABSENT) {
                 // TODO: Add continuation support to the server.
                 ASSERT(false && "Unexpected Continuation data as not supported in SDP server");
@@ -461,14 +524,36 @@ namespace SDP {
         }
 
         // In practice no continuation information - this response is always complete.
-        _pdu.Construct(PDU::ServiceSearchAttributeResponse, payload);
+        _pdu.Construct(PDU::ServiceSearchResponse, payload);
     }
 
-    void ServerSocket::Response::SerializeServiceAttributeResponse(const uint32_t /* serviceHandle */ , const uint16_t /* maxBytes */,  const std::list<uint32_t>& /* attributeRanges */)
+    void ServerSocket::Response::SerializeServiceAttributeResponse(const uint32_t serviceHandle , const uint16_t maxBytes,  const std::list<uint32_t>& attributeRanges)
     {
-        // TODO?
-        TRACE_L1("SDP ServiceAttributeResponse not supported");
-        SerializeErrorResponse(PDU::UnsupportedSdpVersion);
+        uint8_t scratchPad[1024];
+        Payload payload(scratchPad, sizeof(scratchPad), 0);
+
+        payload.Push(use_length /* no descriptor! */, [&](Payload& payload) {
+            payload.Push(use_descriptor, [&](Payload& sequence) {
+                for (const uint32_t range : attributeRanges) {
+                    _server.Serialize(serviceHandle, std::pair<uint16_t, uint16_t>(range >> 16, range), [&](const uint16_t id, const Buffer& buffer) {
+                        if (buffer.size() != 0) {
+                            sequence.Push([&](Payload& record) {
+                                record.Push(use_descriptor, id);
+                                record.Push(buffer); // no descriptor here!
+                            });
+                        }
+                    });
+                }
+            });
+        });
+
+        if (payload.Length() > maxBytes) {
+            ASSERT(false && "ServiceAttribute response exceeded maxBytes");
+            // TODO: Add continuation support to the server.
+            SerializeErrorResponse(PDU::InsufficientResources); // for the lack of a better error code...
+        } else {
+            _pdu.Construct(PDU::ServiceAttributeResponse, payload);
+        }
     }
 
     void ServerSocket::Response::SerializeServiceSearchAttributeResponse(const std::list<UUID>& uuids, uint16_t maxBytes, const std::list<uint32_t>& attributeRanges)

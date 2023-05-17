@@ -36,6 +36,8 @@ namespace SDP {
     struct EXTERNAL use_length_t { explicit use_length_t() = default; };
     constexpr use_length_t use_length = use_length_t{};
 
+    static constexpr DefaultScratchpadSize = 1024;
+
     class EXTERNAL Payload : public DataRecordBE {
     public:
         enum elementtype : uint8_t {
@@ -74,7 +76,7 @@ namespace SDP {
         using DataRecordBE::DataRecordBE;
         using DataRecordBE::Pop;
         using DataRecordBE::Push;
-        using DataRecordBE::Peek;
+        using DataRecordBE::PopAssign;
 
         ~Payload() = default;
 
@@ -184,19 +186,19 @@ namespace SDP {
                 Push(sequence, length);
             }
         }
-        void Push(const Builder& builder, const uint16_t scratchPadSize = 2048)
+        void Push(const Builder& Build, const uint16_t scratchPadSize = 2048)
         {
-            uint8_t scratchPad[scratchPadSize];
-            Payload sequence(scratchPad, sizeof(scratchPad));
-            builder(sequence);
+            uint8_t* scratchPad = static_cast<uint8_t*>(ALLOCA(scratchPadSize));
+            Payload sequence(scratchPad, scratchPadSize, 0);
+            Build(sequence);
             Push(sequence);
         }
         template<typename TAG>
-        void Push(TAG tag, const Builder& builder, const bool alternative = false, const uint16_t scratchPadSize = 2048)
+        void Push(TAG tag, const Builder& Build, const bool alternative = false, const uint16_t scratchPadSize = 2048)
         {
-            uint8_t scratchPad[scratchPadSize];
-            Payload sequence(scratchPad, sizeof(scratchPad));
-            builder(sequence);
+            uint8_t* scratchPad = static_cast<uint8_t*>(ALLOCA(scratchPadSize));
+            Payload sequence(scratchPad, scratchPadSize, 0);
+            Build(sequence);
             Push(tag, sequence, alternative);
         }
         template<typename TYPE>
@@ -389,7 +391,7 @@ namespace SDP {
         }
 
     public:
-        void Peek(use_descriptor_t, Payload& element) const
+        void PopAssign(use_descriptor_t, Payload& element) const
         {
             elementtype elemType;
             uint32_t elemSize;
@@ -553,7 +555,7 @@ namespace SDP {
                     _size = (HEADER_SIZE + payloadSize);
                 }
             }
-            void Construct(const pduid type, const SDP::Payload& parameters)
+            void Construct(const pduid type, const Payload& parameters)
             {
                 ASSERT(Capacity() >= (parameters.Length() + MIN_BUFFER_SIZE));
 
@@ -572,11 +574,11 @@ namespace SDP {
                     TRACE(Trace::Error, (_T("Parameters to large to fit in PDU [%d]"), parameters.Length()));
                 }
             }
-            void Construct(const pduid type, const SDP::Payload::Builder& builder, const uint32_t scratchPadSize = DEFAULT_SCRATCHPAD_SIZE)
+            void Construct(const pduid type, const Payload::Builder& Build, const uint32_t scratchPadSize = DEFAULT_SCRATCHPAD_SIZE)
             {
-                uint8_t scratchPad[scratchPadSize];
-                SDP::Payload parameters(scratchPad, sizeof(scratchPad));
-                builder(parameters);
+                uint8_t* scratchPad = static_cast<uint8_t*>(ALLOCA(scratchPadSize));
+                Payload parameters(scratchPad, scratchPadSize, 0);
+                Build(parameters);
                 Construct(type, parameters);
             }
 
@@ -694,7 +696,7 @@ namespace SDP {
             PDU::errorid _status;
             uint16_t _transactionId;
             uint8_t* _scratchPad;
-            SDP::Payload _payload;
+            Payload _payload;
             Buffer _continuationData;
         }; // class Inward
 
@@ -719,8 +721,8 @@ namespace SDP {
                     ASSERT(maxResults > 0);
 
                     _pdu.NextTransaction();
-                    _pdu.Construct(PDU::ServiceSearchRequest, [&](SDP::Payload& parameters) {
-                        parameters.Push(SDP::use_descriptor, services);
+                    _pdu.Construct(PDU::ServiceSearchRequest, [&](Payload& parameters) {
+                        parameters.Push(use_descriptor, services);
                         parameters.Push(maxResults);
                     });
                 }
@@ -730,10 +732,10 @@ namespace SDP {
                     ASSERT((attributeIdRanges.size() > 0) && (attributeIdRanges.size() <= 256));
 
                     _pdu.NextTransaction();
-                    _pdu.Construct(PDU::ServiceAttributeRequest, [&](SDP::Payload& parameters) {
+                    _pdu.Construct(PDU::ServiceAttributeRequest, [&](Payload& parameters) {
                         parameters.Push(serviceHandle);
                         parameters.Push(_pdu.Capacity());
-                        parameters.Push(SDP::use_descriptor, attributeIdRanges);
+                        parameters.Push(use_descriptor, attributeIdRanges);
                     });
                 }
                 void ServiceSearchAttribute(const std::list<UUID>& services, const std::list<uint32_t>& attributeIdRanges)
@@ -742,10 +744,10 @@ namespace SDP {
                     ASSERT((attributeIdRanges.size() > 0) && (attributeIdRanges.size() <= 256));
 
                     _pdu.NextTransaction();
-                    _pdu.Construct(PDU::ServiceSearchAttributeRequest, [&](SDP::Payload& parameters) {
-                        parameters.Push(SDP::use_descriptor, services);
+                    _pdu.Construct(PDU::ServiceSearchAttributeRequest, [&](Payload& parameters) {
+                        parameters.Push(use_descriptor, services);
                         parameters.Push(_pdu.Capacity());
-                        parameters.Push(SDP::use_descriptor, attributeIdRanges);
+                        parameters.Push(use_descriptor, attributeIdRanges);
                     });
                 }
             }; // class Request
@@ -782,8 +784,8 @@ namespace SDP {
                 uint16_t Deserialize(const uint16_t reqTransactionId, const uint8_t stream[], const uint16_t length);
 
             private:
-                PDU::errorid DeserializeServiceSearchResponse(const SDP::Payload& params);
-                PDU::errorid DeserializeServiceAttributeResponse(const SDP::Payload& params);
+                PDU::errorid DeserializeServiceSearchResponse(const Payload& params);
+                PDU::errorid DeserializeServiceAttributeResponse(const Payload& params);
 
             private:
                 std::list<uint32_t> _handles;
@@ -1051,9 +1053,9 @@ namespace SDP {
             uint16_t Deserialize(const uint8_t stream[], const uint16_t length);
 
         private:
-            PDU::errorid DeserializeServiceSearchRequest(const SDP::Payload& params);
-            PDU::errorid DeserializeServiceAttributeRequest(const SDP::Payload& params);
-            PDU::errorid DeserializeServiceSearchAttributeRequest(const SDP::Payload& params);
+            PDU::errorid DeserializeServiceSearchRequest(const Payload& params);
+            PDU::errorid DeserializeServiceAttributeRequest(const Payload& params);
+            PDU::errorid DeserializeServiceSearchAttributeRequest(const Payload& params);
 
         private:
             ServerSocket& _server;
