@@ -910,22 +910,18 @@ namespace SDP {
         }
         string Name() const
         {
-            string name;
+            string name{};
 
             if (LanguageBaseAttributeIDList() != nullptr) {
                 uint16_t lb = LanguageBaseAttributeIDList()->LanguageBase("en", CHARSET_US_ASCII);
+                if (lb == 0) {
+                    lb = LanguageBaseAttributeIDList()->LanguageBase("en", CHARSET_UTF8);
+                }
+
                 if (lb != 0) {
                     const Buffer* buffer = Attribute(lb + AttributeDescriptor::ServiceNameOffset);
                     if (buffer != nullptr) {
                         name = Data::Element<std::string>(*buffer).Value();
-                    }
-                } else {
-                    lb = LanguageBaseAttributeIDList()->LanguageBase("en", CHARSET_UTF8);
-                    if (lb != 0) {
-                        const Buffer* buffer = Attribute(lb + AttributeDescriptor::ServiceNameOffset);
-                        if (buffer != nullptr) {
-                            name = Data::Element<std::string>(*buffer).Value();
-                        }
                     }
                 }
             }
