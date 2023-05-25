@@ -24,77 +24,171 @@ namespace WPEFramework {
 
 namespace Bluetooth {
 
-    uint16_t AVDTPSocket::Command::Response::Deserialize(const uint8_t expectedLabel, const uint8_t stream[], const uint16_t length)
+namespace AVDTP {
+
+    uint16_t Signal::Serialize(uint8_t stream[], const uint16_t length) const
     {
-        uint16_t result = 0;
+        ASSERT(stream != nullptr);
 
-        CMD_DUMP("AVDTP received", stream, length);
+        constexpr uint8_t HeaderSizeSingle = 2;
+        constexpr uint8_t HeaderSizeStart = 3;
+        constexpr uint8_t HeaderSizeContinue = 1;
 
-        Signal::signalidentifier signalId{};
-        Signal::packettype pktType{};
-        Signal::messagetype msgType{};
-        uint8_t label = 0;
-        uint8_t packets = 1;
-        Signal signal(stream, length);
+        DataRecord msg(stream, length, 0);
+        packettype pktType{};
 
-        signal.Pop(label, signalId, msgType, pktType, packets);
-        if (label == expectedLabel) {
-            if (msgType == Signal::RESPONSE_ACCEPT) {
-                _status = Signal::SUCCESS;
-                signal.Pop(_payload, signal.Available());
-            } else if (msgType == Signal::RESPONSE_REJECT) {
-                if ((signalId == Signal::AVDTP_SET_CONFIGURATION)
-                        || (signalId == Signal::AVDTP_RECONFIGURE)
-                        || (signalId == Signal::AVDTP_START)
-                        || (signalId == Signal::AVDTP_SUSPEND)) {
+        if (_payload.Length() + HeaderSizeSingle <= length) {
+
+            if (_processedPackets == 0) {
+                ASSERT(_expectedPackets == 0);
+
+                pktType = packettype::SINGLE;
+                _expectedPackets = 1;
+            }
+        }
+        else {
+            // Have to fragment the signal...
+            if (_processedPackets == 0) {
+                ASSERT(_expectedPackets == 0);
+
+                _expectedPackets = ((_payload.Length() + HeaderSizeStart + (length - HeaderSizeContinue) - 1) / (length - HeaderSizeContinue));
+                pktType = packettype::START;
+            }
+            else if (_processedPackets == (_expectedPackets - 1)) {
+                pktType = packettype::END;
+            }
+            else {
+                pktType = packettype::CONTINUE;
+            }
+        }
+
+        if (_processedPackets != _expectedPackets) {
+
+            if (_processedPackets == 0) {
+                TRACE_L1("AVDTP: sending %s", AsString().c_str());
+            }
+
+            msg.Push(static_cast<uint8_t>((_label << 4) | (static_cast<uint8_t>(pktType) << 2) | static_cast<uint8_t>(_type)));
+
+            if (pktType == packettype::START) {
+                msg.Push(_expectedPackets);
+            }
+
+            if ((pktType == packettype::START) || (pktType == packettype::SINGLE)) {
+                msg.Push(static_cast<uint8_t>(_id & 0x3F));
+            }
+
+            const uint16_t payloadSize = std::min((length - msg.Length()), (_payload.Length() - _offset));
+
+            if (payloadSize != 0) {
+                Payload payload((_payload.Data() + _offset), payloadSize);
+                msg.Push(payload);
+            }
+
+            _processedPackets++;
+        }
+
+        return (msg.Length());
+    }
+
+    uint16_t Signal::Deserialize(const uint8_t stream[], const uint16_t length)
+    {
+        ASSERT(stream != nullptr);
+
+        bool truncated = false;
+        packettype pktType{};
+        DataRecord msg(stream, length);
+
+        if (msg.Available() >= 1) {
+            uint8_t octet;
+            msg.Pop(octet);
+
+            pktType = static_cast<packettype>((octet >> 2) & 0x3);
+
+            if ((pktType == packettype::START) || (pktType == packettype::SINGLE)) {
+                _expectedPackets = 1;
+                _label = (octet >> 4);
+                _type = static_cast<messagetype>(octet & 0x3);
+            }
+        }
+        else {
+            truncated = true;
+        }
+
+        if ((truncated == false) && (pktType == packettype::START)) {
+            if (msg.Available() >= 1) {
+                msg.Pop(_expectedPackets);
+            }
+            else {
+                truncated = true;
+            }
+        }
+
+        if ((truncated == false) && ((pktType == packettype::START) || (pktType == packettype::SINGLE))) {
+            if (msg.Available() >= 1) {
+
+                uint8_t octet;
+                msg.Pop(octet);
+
+                _id = static_cast<signalidentifier>(octet & 0x3F);
+            }
+            else {
+                truncated = true;
+            }
+        }
+
+        if (truncated == false) {
+            if ((_type == messagetype::RESPONSE_ACCEPT) || (_type == messagetype::COMMAND)) {
+                msg.Pop(_payload, msg.Available());
+                _errorCode = errorcode::IN_PROGRESS;
+            }
+        }
+        else {
+            TRACE_L1("AVDTP: truncated signal data");
+            _errorCode = errorcode::GENERAL_ERROR;
+        }
+
+        _processedPackets++;
+
+        if (IsComplete() == true) {
+
+            if (IsValid() == false) {
+                TRACE_L1("Broken frame received");
+                _errorCode = errorcode::GENERAL_ERROR;
+            }
+            else if (_type == messagetype::RESPONSE_ACCEPT) {
+                _errorCode = errorcode::SUCCESS;
+            }
+            else if (_type == messagetype::RESPONSE_REJECT) {
+
+                if ((_id == AVDTP_SET_CONFIGURATION) || (_id == AVDTP_RECONFIGURE)
+                        || (_id == AVDTP_START) || (_id == AVDTP_SUSPEND)) {
 
                     // These signal responses also include the endpoint id that failed
-                    uint8_t failedSeid{};
-                    signal.Pop(failedSeid);
+                    uint8_t octet{};
+                    msg.Pop(octet);
                 }
 
-                signal.Pop(_status);
-            } else {
+                if (msg.Available() >= sizeof(_errorCode)) {
+                    msg.Pop(_errorCode);
+                }
+                else {
+                    TRACE_L1("AVDTP: truncated signal data");
+                    _errorCode = errorcode::GENERAL_ERROR;
+                }
+            }
+            else {
                 // GENERIC_REJECT or anything else unexpected
-                _status = Signal::GENERAL_ERROR;
+                _errorCode = errorcode::GENERAL_ERROR;
             }
 
-            _type = signalId;
-            result = length;
-        } else {
-            TRACE_L1("Out of order signal label [got %d, expected %d]", label, expectedLabel);
+            TRACE_L1("AVDTP: received %s; result: %d", AsString().c_str(), _errorCode);
         }
 
-        return (result);
+        return (length);
     }
 
-    void AVDTPSocket::Command::Response::ReadDiscovery(const std::function<void(const Buffer&)>& handler) const
-    {
-        // Split the payload into SEP sections and pass to the handler for deserialisation
-        ASSERT(Type() == Signal::signalidentifier::AVDTP_DISCOVER);
-
-        while (_payload.Available() >= 2) {
-            Buffer sep;
-            _payload.Pop(sep, 2);
-            handler(sep);
-        }
-    }
-
-    void AVDTPSocket::Command::Response::ReadConfiguration(const std::function<void(const uint8_t /* category */, const Buffer&)>& handler) const
-    {
-        // Split the payload into configuration sections and pass to the handler for deserialisation
-        while (_payload.Available() >= 2) {
-            uint8_t category{};
-            uint8_t length{};
-            Buffer config;
-            _payload.Pop(category);
-            _payload.Pop(length);
-            if (length > 0) {
-                _payload.Pop(config, length);
-            }
-            handler(category, config);
-        }
-    }
+} // namespace AVDTP
 
 } // namespace Bluetooth
 

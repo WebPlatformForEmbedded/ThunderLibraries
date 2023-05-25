@@ -26,239 +26,510 @@ namespace WPEFramework {
 
 namespace Bluetooth {
 
-    class EXTERNAL AVDTPProfile {
-    public:
-        typedef std::function<void(const uint32_t)> Handler;
+namespace AVDTP {
 
-        class EXTERNAL StreamEndPoint {
-            friend class AVDTPProfile;
+    class EXTERNAL StreamEndPoint {
+    public:
+        class EXTERNAL Service {
+        public:
+            enum categorytype : uint8_t {
+                INVALID             = 0,
+
+                MEDIA_TRANSPORT     = 0x01,
+                REPORTING           = 0x02,
+                RECOVERY            = 0x03,
+                CONTENT_PROTECTION  = 0x04,
+                HEADER_COMPRESSION  = 0x05,
+                MULTIPLEXING        = 0x06,
+                MEDIA_CODEC         = 0x07,
+                DELAY_REPORTING     = 0x08,
+            };
 
         public:
-            class EXTERNAL ServiceCapabilities {
-            public:
-                enum category : uint8_t {
-                    MEDIA_TRANSPORT     = 0x01,
-                    REPORTING           = 0x02,
-                    RECOVERY            = 0x03,
-                    CONTENT_PROTECTION  = 0x04,
-                    HEADER_COMPRESSION  = 0x05,
-                    MULTIPLEXING        = 0x06,
-                    MEDIA_CODEC         = 0x07,
-                    DELAY_REPORTING     = 0x08
+            template<typename T>
+            Service(const categorytype category, T&& params)
+                : _category(category)
+                , _params(std::forward<T>(params))
+            {
+                if ((category > DELAY_REPORTING) || (category == INVALID)) {
+                    TRACE_L1("Invalid category %d", category);
+                }
+            }
+            ~Service() = default;
+
+        public:
+            categorytype Category() const {
+                return (_category);
+            }
+            const Buffer& Params() const {
+                return (_params);
+            }
+
+        public:
+            static constexpr bool IsValidCategory(const categorytype category) {
+                return ((category != INVALID) && (category <= DELAY_REPORTING));
+            }
+            static constexpr bool IsBasicCategory(const categorytype category) {
+                // which are basic capabilities?
+                return ((category != INVALID) && (category < DELAY_REPORTING));
+            }
+            static constexpr bool IsApplicationCategory(const categorytype category) {
+                // which are Application Service capabilities?
+                return ((category == MEDIA_CODEC) || (category == CONTENT_PROTECTION) || (category == DELAY_REPORTING));
+            }
+            static constexpr bool IsTransportCategory(const categorytype category) {
+                // which are Transport Service capabilities?
+                return ((category == MEDIA_TRANSPORT) || (category == REPORTING) || (category == RECOVERY)
+                            || (category == HEADER_COMPRESSION) || (category == MULTIPLEXING));
+            }
+
+        public:
+#ifdef __DEBUG__
+            string AsString() const
+            {
+                static const char *categoryLabels[] = {
+                    "INVALID", "MEDIA_TRANSPORT", "REPORTINGS", "RECOVERY",
+                    "CONTENT_PROTECTION", "HEADER_COMPRESSION", "MULTIPLEXING", "MEDIA_CODEC",
+                    "DELAY_REPORTING"
                 };
 
-            public:
-                ServiceCapabilities(const uint8_t serviceCategory, const Buffer& data)
-                    : _category(static_cast<category>(serviceCategory))
-                    , _data(data)
-                {
-                    // capabilities data is beyond AVDTP, let the client deserialize
-                }
-                ~ServiceCapabilities() = default;
-
-            public:
-                category Category() const
-                {
-                    return (_category);
-                }
-                string Name() const
-                {
-                    Core::EnumerateType<category> value(_category);
-                    string name = (value.IsSet() == true? string(value.Data()) : Core::ToString(_category));
-                    return (name);
-                }
-                const Buffer& Data() const
-                {
-                    return (_data);
-                }
-
-            private:
-                const category _category;
-                const Buffer _data;
-            }; // class ServiceCapabilities
-
-        public:
-            enum servicetype : uint8_t {
-                SOURCE  = 0x00,
-                SINK    = 0x01,
-            };
-
-            enum mediatype : uint8_t {
-                AUDIO       = 0x00,
-                VIDEO       = 0x01,
-                MULTIMEDIA  = 0x02
-            };
-
-        public:
-            StreamEndPoint() = delete;
-            StreamEndPoint(const StreamEndPoint&) = delete;
-            StreamEndPoint& operator=(const StreamEndPoint&) = delete;
-
-            StreamEndPoint(const Buffer& endpointData)
-                : _id(0)
-                , _inUse(false)
-                , _serviceType(SOURCE)
-                , _mediaType(AUDIO)
-                , _capabilities()
-            {
-                // deserialize the endpoint data
-                const uint8_t* data = reinterpret_cast<const uint8_t*>(endpointData.data());
-                _id = (data[0] >> 2);
-                _inUse = (data[0] & 0x02);
-                _mediaType = static_cast<mediatype>(data[1] >> 4);
-                _serviceType = static_cast<servicetype>(!!(data[1] & 0x08));
+                return (Core::Format(_T("%02x '%s' with %d bytes <%s>)"),
+                    _category, categoryLabels[static_cast<uint8_t>(_category)], Params().size(), Params().ToString().c_str()));
             }
-            ~StreamEndPoint() = default;
-
-        public:
-            uint32_t SEID() const
-            {
-                return (_id);
-            }
-            servicetype ServiceType() const
-            {
-                return (_serviceType);
-            }
-            mediatype MediaType() const
-            {
-                return (_mediaType);
-            }
-            bool IsFree() const
-            {
-                return (!_inUse);
-            }
-            const std::map<uint8_t, ServiceCapabilities>& Capabilities() const
-            {
-                return (_capabilities);
-            }
+#endif // __DEBUG__
 
         private:
-            void CollectCapability(const uint8_t category, const Buffer& value)
-            {
-                _capabilities.emplace(std::piecewise_construct,
-                                      std::forward_as_tuple(category),
-                                      std::forward_as_tuple(category, value));
+            const categorytype _category;
+            const Buffer _params;
+        }; // class Service
+
+    public:
+        enum septype : uint8_t {
+            SOURCE  = 0x00,
+            SINK    = 0x01,
+        };
+
+        enum mediatype : uint8_t {
+            AUDIO       = 0x00,
+            VIDEO       = 0x01,
+            MULTIMEDIA  = 0x02
+        };
+
+        enum statetype : uint8_t {
+            IDLE,
+            CONFIGURED,
+            OPENED,
+            STARTED
+        };
+
+    public:
+        StreamEndPoint() = delete;
+        StreamEndPoint(const StreamEndPoint&) = delete;
+        StreamEndPoint& operator=(const StreamEndPoint&) = delete;
+        virtual ~StreamEndPoint() = default;
+
+        StreamEndPoint(const uint8_t id, const septype service, const mediatype media,
+                       const std::function<void(StreamEndPoint&)>& fillerCb = nullptr)
+            : _id(id)
+            , _state(IDLE)
+            , _type(service)
+            , _mediaType(media)
+            , _capabilities()
+            , _configuration()
+        {
+            ASSERT(id != 0);
+
+            if (fillerCb != nullptr) {
+                fillerCb(*this);
             }
-
-        private:
-            uint8_t _id;
-            bool _inUse;
-            servicetype _serviceType;
-            mediatype _mediaType;
-            std::map<uint8_t, ServiceCapabilities> _capabilities;
-        }; // class StreamEndPoint
-
-    public:
-        AVDTPProfile()
-            : _socket(nullptr)
-            , _command()
-            , _handler(nullptr)
-            , _seps()
-            , _sepsIterator(_seps.end())
-            , _expired(0)
+        }
+        StreamEndPoint(StreamEndPoint&& other)
+            : _id(other._id)
+            , _state(other._state)
+            , _type(other._type)
+            , _mediaType(other._mediaType)
+            , _capabilities(std::move(other._capabilities))
+            , _configuration(std::move(other._configuration))
         {
         }
-        AVDTPProfile(const AVDTPProfile&) = delete;
-        AVDTPProfile& operator=(const AVDTPProfile&) = delete;
-        ~AVDTPProfile() = default;
+        StreamEndPoint(const uint8_t data[2])
+            : _id(0)
+            , _state(IDLE)
+            , _type()
+            , _mediaType()
+            , _capabilities()
+            , _configuration()
+        {
+            Deserialize(data);
+        }
 
     public:
-        const std::list<StreamEndPoint>& StreamEndPoints() const
-        {
-            return (_seps);
+        using ServiceMap = std::map<Service::categorytype, Service>;
+
+    public:
+        uint32_t Id() const {
+            return (_id);
         }
-        uint32_t Discover(const uint32_t waitTime, AVDTPSocket& socket, const Handler& handler)
+        septype Type() const {
+            return (_type);
+        }
+        mediatype MediaType() const {
+            return (_mediaType);
+        }
+        bool IsFree() const {
+            return (_state == IDLE);
+        }
+        statetype State() const {
+            return (_state);
+        }
+        const ServiceMap& Capabilities() const {
+            return (_capabilities);
+        }
+        ServiceMap& Capabilities() {
+            return (_capabilities);
+        }
+        const ServiceMap& Configuration() const {
+            return (_configuration);
+        }
+        ServiceMap& Configuration() {
+            return (_configuration);
+        }
+
+    public:
+        virtual uint32_t Configure(const uint8_t /* intSeid */, uint8_t& /* failedCategory */)
         {
-            uint32_t result = Core::ERROR_INPROGRESS;
+            return (Core::ERROR_UNAVAILABLE);
+        }
+        virtual uint32_t Reconfigure(uint8_t& /* failedCategory */)
+        {
+            return (Core::ERROR_UNAVAILABLE);
+        }
+        virtual uint32_t GetCapabilities() const
+        {
+            return (Core::ERROR_UNAVAILABLE);
+        }
+        virtual uint32_t GetConfiguration() const
+        {
+            return (Core::ERROR_UNAVAILABLE); 
+        }
+        virtual uint32_t Start()
+        {
+            return (Core::ERROR_UNAVAILABLE);
+        }
+        virtual uint32_t Suspend()
+        {
+            return (Core::ERROR_UNAVAILABLE);
+        }
+        virtual uint32_t Open()
+        {
+            return (Core::ERROR_UNAVAILABLE);
+        }
+        virtual uint32_t Close()
+        {
+            return (Core::ERROR_UNAVAILABLE);
+        }
+        virtual uint32_t Abort()
+        {
+            return (Core::ERROR_UNAVAILABLE);
+        }
 
-            _handler = handler;
-            _socket = &socket;
-            _expired = Core::Time::Now().Add(waitTime).Ticks();
+    public:
+        statetype State(const statetype newState)
+        {
+            const statetype old = _state;
 
-            // Firstly, pick up available SEPs
-            _command.Discover();
+            _state = newState;
 
-            _socket->Execute(waitTime, _command, [&](const AVDTPSocket::Command& cmd) {
-                if ((cmd.Status() == Core::ERROR_NONE) && (cmd.Result().Status() == AVDTPSocket::Command::Signal::SUCCESS)) {
+            return (old);
+        }
 
-                    _seps.clear();
+    public:
+        struct capability_t { explicit capability_t() = default; };
+        static constexpr capability_t capability = capability_t{}; // tag for selecting a proper overload
 
-                    cmd.Result().ReadDiscovery([this](const Buffer& sep) {
-                        _seps.emplace_back(sep);
-                    });
+        void Add(capability_t, const Service::categorytype category)
+        {
+            _capabilities.emplace(std::piecewise_construct,
+                            std::forward_as_tuple(category),
+                            std::forward_as_tuple(category, Buffer()));
+        }
+        void Add(const Service::categorytype category)
+        {
+            _configuration.emplace(std::piecewise_construct,
+                            std::forward_as_tuple(category),
+                            std::forward_as_tuple(category, Buffer()));
+        }
 
-                    if (_seps.empty() == false) {
-                        _sepsIterator = _seps.begin();
-                        RetrieveBasicCapabilities();
-                    } else {
-                        // No SEPs...?
-                        Report(Core::ERROR_NONE);
-                    }
-                } else {
-                    Report(Core::ERROR_GENERAL);
-                }
-            });
+        template<typename T>
+        void Add(capability_t, const Service::categorytype category, T&& buffer)
+        {
+            _capabilities.emplace(std::piecewise_construct,
+                            std::forward_as_tuple(category),
+                            std::forward_as_tuple(category, std::forward<T>(buffer)));
+        }
+        template<typename T>
+        void Add(const Service::categorytype category, T&& buffer)
+        {
+            _configuration.emplace(std::piecewise_construct,
+                            std::forward_as_tuple(category),
+                            std::forward_as_tuple(category, std::forward<T>(buffer)));
+        }
 
-            return (result);
+    public:
+        void Serialize(Payload& payload) const
+        {
+            uint8_t octet;
+            octet = ((Id() << 2) | ((!IsFree()) << 1));
+            payload.Push(octet);
+
+            octet = ((_mediaType << 4) | (_type << 3));
+            payload.Push(octet);
+        }
+
+#ifdef __DEBUG__
+        string AsString() const
+        {
+            static const char *sepTypeLabel[] = {
+                "Source", "Sink"
+            };
+
+            static const char *mediaTypeLabel[] = {
+                "Audio", "Video", "Multimedia"
+            };
+
+            ASSERT(_type <= 1);
+            ASSERT(_mediaType <= 2);
+
+            return (Core::Format(_T("Stream Endpoint SEID %02x; '%s %s' (%s)"),
+                Id(), mediaTypeLabel[MediaType()], sepTypeLabel[Type()], (IsFree()? "free" : "in-use")));
+        }
+#endif // __DEBUG__
+
+    private:
+        void Deserialize(const uint8_t data[2])
+        {
+            _id = (data[0] >> 2);
+            _mediaType = static_cast<mediatype>(data[1] >> 4);
+            _type = static_cast<septype>(!!(data[1] & 0x08));
+            _state = ((data[0] & 0x02) != 0? OPENED : IDLE);
+            _capabilities.clear();
+            _configuration.clear();
         }
 
     private:
-        void RetrieveBasicCapabilities()
+        uint8_t _id;
+        statetype _state;
+        septype _type;
+        mediatype _mediaType;
+        ServiceMap _capabilities;
+        ServiceMap _configuration;
+    }; // class StreamEndPoint
+
+    class EXTERNAL Client {
+    public:
+        Client() = delete;
+        Client(const Client&) = delete;
+        Client& operator=(const Client&) = delete;
+        ~Client() = default;
+
+        Client(ClientSocket& socket)
+            : _socket(socket)
+            , _command(socket)
         {
-            // Secondly, for each endpoint pick up capabilities
-            if (_sepsIterator != _seps.end()) {
-                const uint32_t waitTime = AvailableTime();
-                if (waitTime > 0) {
-                    _command.GetCapabilities((*_sepsIterator).SEID());
-
-                    _socket->Execute(waitTime, _command, [&](const AVDTPSocket::Command& cmd) {
-                        if ((cmd.Status() == Core::ERROR_NONE) && (cmd.Result().Status() == AVDTPSocket::Command::Signal::SUCCESS)) {
-
-                            cmd.Result().ReadConfiguration([this](const uint8_t category, const Buffer& data) {
-                                (*_sepsIterator).CollectCapability(category, data);
-                            });
-
-                            _sepsIterator++;
-                            RetrieveBasicCapabilities();
-                        } else {
-                            Report(Core::ERROR_GENERAL);
-                        }
-                    });
-                }
-            } else {
-                // Out of endpoints to query
-                Report(Core::ERROR_NONE);
-            }
-        }
-        void Report(const uint32_t result)
-        {
-            if (_socket != nullptr) {
-                Handler caller = _handler;
-                _socket = nullptr;
-                _handler = nullptr;
-                _expired = 0;
-
-                caller(result);
-            }
-        }
-        uint32_t AvailableTime()
-        {
-            uint64_t now = Core::Time::Now().Ticks();
-            uint32_t result = (now >= _expired ? 0 : static_cast<uint32_t>((_expired - now) / Core::Time::TicksPerMillisecond));
-            if (result == 0) {
-                Report(Core::ERROR_TIMEDOUT);
-            }
-            return (result);
         }
 
     public:
-        AVDTPSocket* _socket;
-        AVDTPSocket::Command _command;
-        Handler _handler;
-        std::list<StreamEndPoint> _seps;
-        std::list<StreamEndPoint>::iterator _sepsIterator;
-        uint64_t _expired;
-    }; // class AVDTPProfile
+        uint32_t Discover(const std::function<void(StreamEndPoint&&)>& reportCb) const;
+
+        uint32_t SetConfiguration(const uint8_t id, const uint8_t intId, const StreamEndPoint::ServiceMap& config);
+
+        uint32_t GetConfiguration(const uint8_t id, const std::function<void(const uint8_t, Buffer&&)>& reportCb) const;
+
+        uint32_t Start(const uint8_t id)
+        {
+            ASSERT(id != 0);
+
+            _command.Set(Signal::AVDTP_START, id);
+
+            return (Execute(_command));
+        }
+        uint32_t Suspend(const uint8_t id)
+        {
+            ASSERT(id != 0);
+
+            _command.Set(Signal::AVDTP_SUSPEND, id);
+
+            return (Execute(_command));
+        }
+        uint32_t Open(const uint8_t id)
+        {
+            ASSERT(id != 0);
+
+            _command.Set(Signal::AVDTP_OPEN, id);
+
+            return (Execute(_command));
+        }
+        uint32_t Close(const uint8_t id)
+        {
+            ASSERT(id != 0);
+
+            _command.Set(Signal::AVDTP_CLOSE, id);
+
+            return (Execute(_command));
+        }
+        uint32_t Abort(const uint8_t id)
+        {
+            _command.Set(Signal::AVDTP_ABORT, id);
+
+            return (Execute(_command));
+        }
+
+    public:
+        uint32_t SetConfiguration(StreamEndPoint& ep, const uint8_t intId)
+        {
+            return (SetConfiguration(ep.Id(), intId, ep.Configuration()));
+        }
+        uint32_t GetConfiguration(StreamEndPoint& ep) const
+        {
+            return (GetConfiguration(ep.Id(), [&](const uint8_t category, const Buffer& data) {
+                ep.Add(static_cast<StreamEndPoint::Service::categorytype>(category), data);
+            }));
+        }
+        uint32_t Start(const StreamEndPoint& ep)
+        {
+            return (Start(ep.Id()));
+        }
+        uint32_t Suspend(const StreamEndPoint& ep)
+        {
+            return (Suspend(ep.Id()));
+        }
+        uint32_t Open(const StreamEndPoint& ep)
+        {
+            return (Open(ep.Id()));
+        }
+        uint32_t Close(const StreamEndPoint& ep)
+        {
+            return (Close(ep.Id()));
+        }
+        uint32_t Abort(const StreamEndPoint& ep)
+        {
+            return (Abort(ep.Id()));
+        }
+
+    private:
+        uint32_t Execute(ClientSocket::Command& cmd, const Payload::Inspector& inspectorCb = nullptr) const;
+
+    private:
+        ClientSocket& _socket;
+        mutable AVDTP::ClientSocket::Command _command;
+    }; // class Client
+
+    class Server {
+        using Handler = ServerSocket::ResponseHandler;
+
+    public:
+        Server() = default;
+        Server(const Server&) = delete;
+        Server& operator=(const Server&) = delete;
+        virtual ~Server() = default;
+
+    public:
+        virtual bool WithEndpoint(const uint8_t id, const std::function<void(StreamEndPoint&)>& inspectCb) = 0;
+
+    public:
+        void OnSignal(const Signal& signal, const Handler& handler)
+        {
+            switch (signal.Id()) {
+            case Signal::AVDTP_DISCOVER:
+                OnDiscover(handler);
+                break;
+            case Signal::AVDTP_GET_CAPABILITIES:
+                OnGetCapabilities(SEID(signal), handler);
+                break;
+                break;
+            case Signal::AVDTP_GET_ALL_CAPABILITIES:
+                OnGetAllCapabilities(SEID(signal), handler);
+                break;
+            case Signal::AVDTP_SET_CONFIGURATION:
+                OnSetConfiguration(signal, handler);
+                break;
+            case Signal::AVDTP_OPEN:
+                OnOpen(SEID(signal), handler);
+                break;
+            case Signal::AVDTP_CLOSE:
+                OnClose(SEID(signal), handler);
+                break;
+            case Signal::AVDTP_START:
+                OnStart(SEID(signal), handler);
+                break;
+            case Signal::AVDTP_SUSPEND:
+                OnSuspend(SEID(signal), handler);
+                break;
+            case Signal::AVDTP_ABORT:
+                OnAbort(SEID(signal), handler);
+                break;
+            default:
+                TRACE_L1("Usupported signal %d", signal.Id());
+                handler(Signal::errorcode::NOT_SUPPORTED_COMMAND);
+                break;
+            }
+        }
+
+    private:
+        void OnDiscover(const Handler&);
+        void OnGetCapabilities(const uint8_t seid, const Handler& handler);
+        void OnGetAllCapabilities(const uint8_t seid, const Handler& handler);
+        void OnSetConfiguration(const Signal& signal, const Handler& handler);
+        void OnReconfigure(const Signal& signal, const Handler& handler);
+        void OnOpen(const uint8_t seid, const Handler& handler);
+        void OnClose(const uint8_t seid, const Handler& handler);
+        void OnStart(const uint8_t seid, const Handler& handler);
+        void OnSuspend(const uint8_t seid, const Handler& handler);
+        void OnAbort(const uint8_t seid, const Handler& handler);
+
+    private:
+        uint8_t SEID(const Signal& signal) const
+        {
+            uint8_t seid = 0;
+
+            signal.InspectPayload([&seid](const Payload& payload) {
+                if (payload.Available() >= 1) {
+                    payload.Pop(seid);
+                    seid >>= 2;
+                }
+            });
+
+            return (seid);
+        }
+        Signal::errorcode ToSignalCode(const uint32_t result)
+        {
+            switch (result)
+            {
+            case Core::ERROR_NONE:
+                return (Signal::errorcode::SUCCESS);
+            case Core::ERROR_UNAVAILABLE:
+                return (Signal::errorcode::NOT_SUPPORTED_COMMAND);
+            case Core::ERROR_ALREADY_CONNECTED:
+                return (Signal::errorcode::SEP_IN_USE);
+            case Core::ERROR_ALREADY_RELEASED:
+                return (Signal::errorcode::SEP_NOT_IN_USE);
+            case Core::ERROR_BAD_REQUEST:
+                return (Signal::errorcode::UNSUPPORTED_CONFIGURATION);
+            case Core::ERROR_ILLEGAL_STATE:
+                return (Signal::errorcode::BAD_STATE);
+            default:
+                ASSERT(!"Undefined error");
+                return (Signal::errorcode::BAD_STATE);
+            }
+        }
+
+    private:
+        Signal::errorcode DeserializeConfig(const Payload& config, StreamEndPoint& ep, uint8_t& invalidCategory,
+                    const std::function<Signal::errorcode(const StreamEndPoint::Service::categorytype)>& verifyFn);
+
+    }; // class Server
+
+} // namespace AVDTP
 
 } // namespace Bluetooth
 
