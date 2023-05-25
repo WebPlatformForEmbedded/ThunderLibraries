@@ -24,6 +24,7 @@ namespace WPEFramework {
 
 ENUM_CONVERSION_BEGIN(Bluetooth::SDP::ClassID::id)
     { Bluetooth::SDP::ClassID::Undefined,   _TXT("(undefined)") },
+
     // Protocols
     { Bluetooth::SDP::ClassID::SDP,         _TXT("SDP") },
     { Bluetooth::SDP::ClassID::UDP,         _TXT("UDP") },
@@ -50,10 +51,12 @@ ENUM_CONVERSION_BEGIN(Bluetooth::SDP::ClassID::id)
     { Bluetooth::SDP::ClassID::MCAP_CTRL,   _TXT("MCAP-ControlChannel") },
     { Bluetooth::SDP::ClassID::MCAP_DATA,   _TXT("MCAP-DataChannel") },
     { Bluetooth::SDP::ClassID::L2CAP,       _TXT("L2CAP") },
+
     // SDP services
     { Bluetooth::SDP::ClassID::ServiceDiscoveryServer,           _TXT("Service Discovery Server") },
     { Bluetooth::SDP::ClassID::BrowseGroupDescriptor,            _TXT("Browse Group Descriptor") },
     { Bluetooth::SDP::ClassID::PublicBrowseRoot,                 _TXT("Public Browse Root") },
+
     // Services and Profiles
     { Bluetooth::SDP::ClassID::SerialPort,                       _TXT("Serial Port (SPP)") },
     { Bluetooth::SDP::ClassID::LANAccessUsingPPP,                _TXT("LAN Access Using PPP (LAP)") },
@@ -146,5 +149,777 @@ ENUM_CONVERSION_BEGIN(Bluetooth::SDP::Service::AttributeDescriptor::id)
     { Bluetooth::SDP::Service::AttributeDescriptor::ClientExecutableURL,         _TXT("ClientExecutableURL") },
     { Bluetooth::SDP::Service::AttributeDescriptor::IconURL,                     _TXT("IconURL") },
 ENUM_CONVERSION_END(Bluetooth::SDP::Service::AttributeDescriptor::id)
+
+namespace Bluetooth {
+
+namespace SDP {
+
+    // CLIENT ---
+
+    uint32_t Client::Discover(const std::list<UUID>& services, Tree& tree) const
+    {
+        // Convenience method to discover and add services and their attributes to a service tree.
+
+        uint32_t result = Core::ERROR_NONE;
+
+        std::vector<uint32_t> handles;
+
+        // First find all the requested services...
+
+        if ((result = ServiceSearch(services, handles)) == Core::ERROR_NONE) {
+
+            for (uint32_t& h : handles) {
+                std::list<std::pair<uint32_t, Buffer>> attributes;
+
+                // Then retrieve their attributes...
+
+                if ((result = ServiceAttribute(h, std::list<uint32_t>{ 0x0000FFFF } /* all of them */, attributes)) == Core::ERROR_NONE) {
+
+                    Service& service(tree.Add(h));
+
+                    for (auto const& attr : attributes) {
+                        service.Deserialize(attr.first, attr.second);
+                    }
+                } else {
+                    break;
+                }
+            }
+        }
+
+        if (result != Core::ERROR_NONE) {
+            TRACE(Trace::Error, (_T("Failed to retrieve Bluetooth services via SDP protocol")));
+        }
+
+        return (result);
+    }
+
+    uint32_t Client::ServiceSearch(const std::list<UUID>& services, std::vector<uint32_t>& outHandles) const
+    {
+        ASSERT((services.size() > 0) && (services.size() <= 12)); // As per spec
+
+        ClientSocket::Command command(_socket);
+
+        const uint16_t maxResults = ((Capacity(command.Result()) - (2 * sizeof(uint32_t))) / sizeof(uint32_t));
+        TRACE_L5("capacity=%d handles", maxResults);
+
+        uint32_t result = Core::ERROR_NONE;
+        Buffer continuationData;
+
+        outHandles.clear();
+
+        do {
+            // Handle fragmented packets by repeating the request until the continuation state is 0.
+
+            command.Set(PDU::ServiceSearchRequest, [&](Payload& payload) {
+
+                // ServiceSearchRequest frame format:
+                // - ServiceSearchPattern (sequence of UUIDs)
+                // - MaximumServiceRecordCount (word)
+                // - ContinuationState
+
+                payload.Push(use_descriptor, services);
+                payload.Push<uint16_t>(maxResults - outHandles.size());
+
+                ASSERT(continuationData.size() <= 16);
+                payload.Push<uint8_t>(continuationData.size());
+
+                if (continuationData.empty() == false) {
+                    payload.Push(continuationData);
+                }
+            });
+
+            result = Execute(command, [&](const Payload& payload) {
+
+                // ServiceSearchResponse frame format:
+                // - TotalServiceRecordCount (long)
+                // - CurrentServiceRecordCount (long)
+                // - ServiceRecordHandleList (list of longs, not a sequence!)
+                // - ContinuationState
+
+                if (payload.Available() < (2 * sizeof(uint16_t))) {
+                    TRACE_L1("SDP: Truncated payload in ServiceSearchResponse!");
+                    result = Core::ERROR_BAD_REQUEST;
+                }
+                else {
+                    uint16_t totalCount{};
+                    payload.Pop(totalCount);
+
+                    uint16_t currentCount{};
+                    payload.Pop(currentCount);
+
+                    TRACE_L5("TotalServiceRecordCount=%d", totalCount);
+                    TRACE_L5("CurrentServiceRecordCount=%d", currentCount);
+
+                    // Clip this in case of a phony value.
+                    totalCount = std::min<uint16_t>(32, totalCount);
+                    currentCount = std::min<uint16_t>(32, currentCount);
+
+                    outHandles.reserve(totalCount);
+
+                    if (payload.Available() >= (currentCount * sizeof(uint32_t))) {
+
+                        payload.Pop(outHandles, currentCount);
+
+                        for (uint16_t i; i < outHandles.size(); i++) {
+                            TRACE_L5("ServiceRecordHandleList[%d]=0x%08x", i, outHandles[i]);
+                        }
+
+                        if (payload.Available() >= sizeof(uint8_t)) {
+                            uint8_t continuationDataLength{};
+                            payload.Pop(continuationDataLength);
+
+                            if ((continuationDataLength > 16) || (payload.Available() < continuationDataLength)) {
+                                TRACE_L("SDP: Invalid continuation data in ServiceSearchResponse!");
+                                result = Core::ERROR_BAD_REQUEST;
+                            }
+                            else if (continuationDataLength > 0) {
+                                payload.Pop(continuationData, continuationDataLength);
+                            }
+                        }
+                        else {
+                            TRACE_L1("SDP: Truncated payload in ServiceSearchResponse!");
+                            result = Core::ERROR_BAD_REQUEST;
+                        }
+
+                        if (payload.Available() != 0) {
+                            TRACE_L1("SDP: Unexpected data in ServiceSearchResponse payload!");
+                        }
+                    } else {
+                        TRACE_L1("SDP: Truncated payload in ServiceSearchResponse!");
+                        result = Core::ERROR_BAD_REQUEST;
+                    }
+                }
+            });
+
+        } while ((continuationData.size() != 0) && (result == Core::ERROR_NONE));
+
+        TRACE_L1("SDP: ServiceSearch found %d matching service(s)", outHandles.size());
+
+        return (result);
+    }
+
+    /* private */
+    uint32_t Client::InternalServiceAttribute(const PDU::pduid id,
+                                              const std::function<void(Payload&)>& buildCb,
+                                              const std::list<uint32_t>& attributeIdRanges,
+                                              std::list<std::pair<uint32_t, Buffer>>& outAttributes) const
+    {
+        ASSERT(buildCb != 0);
+        ASSERT((attributeIdRanges.size() > 0) && (attributeIdRanges.size() <= 256));
+
+        ClientSocket::Command command(_socket);
+
+        const uint16_t maxByteCount = (Capacity(command.Result()) - sizeof(uint16_t));
+        TRACE_L5("capacity=%d bytes", maxByteCount);
+
+        // From client perspective ServiceAttribute and ServiceSearchAttribute are very similar,
+        // hence use one method to handle both.
+
+        uint32_t result = Core::ERROR_NONE;
+        Buffer continuationData;
+
+        do {
+            // Handle fragmented packets by repeating the request until the continuation state is 0.
+
+            command.Set(id, [&](Payload& payload) {
+
+                // Here's the difference between ServiceAttribute and ServiceSearchAttribute handled
+                // First sends a service handle, the second a list of UUIDs to scan for.
+                buildCb(payload);
+
+                payload.Push(maxByteCount);
+                payload.Push(use_descriptor, attributeIdRanges);
+
+                ASSERT(continuationData.size() <= 16);
+                payload.Push<uint8_t>(continuationData.size());
+
+                if (continuationData.empty() == false) {
+                    payload.Push(continuationData);
+                }
+            });
+
+            result = Execute(command, [&](const Payload& payload) {
+
+                // ServiceAttributeResponse/ServiceSearchAttributeResponse frame format:
+                // - AttributeListByteCount (word)
+                // - AttributeList (sequence of long:data pairs, where data size is dependant on the attribute and may be a sequence)
+                // - ContinuationState
+
+                if (payload.Available() < 2) {
+                    TRACE_L1("SDP: Truncated Service(Search)AttributeResponse payload!");
+                    result = Core::ERROR_BAD_REQUEST;
+                }
+                else {
+                    payload.Pop(use_length, [&](const Payload& buffer) {
+                        buffer.Pop(use_descriptor, [&](const Payload& sequence) {
+                            while (sequence.Available() >= 2) {
+                                uint16_t attribute{};
+                                Buffer value;
+
+                                sequence.Pop(use_descriptor, attribute);
+                                sequence.Pop(use_descriptor, value);
+
+                                TRACE_L5("attribute %d=[%s]", attribute, value.ToString().c_str());
+
+                                outAttributes.emplace_back(attribute, std::move(value));
+                            }
+
+                            if (sequence.Available() != 0) {
+                                TRACE_L1("SDP: Unexpected data in Service(Search)AttributeResponse!");
+                            }
+                        });
+
+                        if (buffer.Available() != 0) {
+                            TRACE_L1("SDP: Unexpected data in Service(Search)AttributeResponse!");
+                        }
+                    });
+
+                    if (payload.Available() >= 1) {
+                        uint8_t continuationDataLength{};
+                        payload.Pop(continuationDataLength);
+
+                        if ((continuationDataLength > 16) || (payload.Available() < continuationDataLength)) {
+                            TRACE_L1("SDP: Invalid continuation data in Service(Search)AttributeResponse!");
+                            result = Core::ERROR_BAD_REQUEST;
+                        }
+                        else {
+                            payload.Pop(continuationData, continuationDataLength);
+                        }
+                    }
+                    else {
+                        TRACE_L1("SDP: Truncated payload in Service(Search)AttributeResponse!");
+                        result = Core::ERROR_BAD_REQUEST;
+                    }
+
+                    if (payload.Available() != 0) {
+                        TRACE_L1("SDP: Unexpected data in ServiceSearchAttributeResponse!");
+                    }
+                }
+            });
+        } while ((continuationData.size() != 0) && (result == Core::ERROR_NONE));
+
+        TRACE_L1("SDP: Service(Search)Attribute found %d matching attribute(s)", outAttributes.size());
+
+        return (result);
+    }
+
+    uint32_t Client::ServiceAttribute(const uint32_t serviceHandle, const std::list<uint32_t>& attributeIdRanges,
+                        std::list<std::pair<uint32_t, Buffer>>& outAttributes) const
+    {
+        ASSERT(serviceHandle != 0);
+
+        return (InternalServiceAttribute(PDU::ServiceAttributeRequest, [&](Payload& payload) {
+
+            // ServiceAttributeRequest frame format:
+            // - ServiceRecordHandle (long)
+            // - MaximumAttributeByteCount (word)
+            // - AttributeIDList (sequence of UUID ranges or UUIDs) [only ranges supported in this client-side implementation]
+            // - ContinuationState
+
+            payload.Push(serviceHandle);
+
+            // MaximumAttributeByteCount, AttributeIDList and ContinuationState is handled by InternalServiceAttribute().
+
+        }, attributeIdRanges, outAttributes));
+    }
+
+    uint32_t Client::ServiceSearchAttribute(const std::list<UUID>& services, const std::list<uint32_t>& attributeIdRanges,
+                        std::list<std::pair<uint32_t, Buffer>>& outAttributes) const
+    {
+        ASSERT((services.size() > 0) && (services.size() <= 12));
+
+        return (InternalServiceAttribute(PDU::ServiceSearchAttributeRequest, [&](Payload& payload) {
+
+            // ServiceSearchAttributeRequest frame format:
+            // - ServiceSearchPattern (sequence of UUIDs)
+            // - MaximumAttributeByteCount (word)
+            // - AttributeIDList (sequence of UUID ranges or UUIDs) [only ranges supported in this client-side implementation]
+            // - ContinuationState
+
+            payload.Push(use_descriptor, services);
+
+            // MaximumAttributeByteCount, AttributeIDList and ContinuationState is handled by InternalServiceAttribute().
+
+        }, attributeIdRanges, outAttributes));
+    }
+
+    /* private */
+    uint32_t Client::Execute(ClientSocket::Command& command, const Payload::Inspector& inspectorCb) const
+    {
+        uint32_t result = Core::ERROR_ASYNC_FAILED;
+
+        if (_socket.Exchange(ClientSocket::CommunicationTimeout, command, command) == Core::ERROR_NONE) {
+
+            if (command.Result().Error() != PDU::Success) {
+                TRACE_L1("SDP server: Message %d failed! [%d]", command.Call().Type(), command.Result().Error());
+            }
+            else if (command.Result().TransactionId() != command.Call().TransactionId()) {
+                TRACE_L1("SDP server: Mismatched message transaction ID!");
+            }
+            else {
+                result = Core::ERROR_NONE;
+
+                if (inspectorCb != nullptr) {
+                    command.Result().InspectPayload(inspectorCb);
+                }
+            }
+        }
+
+        return (result);
+    }
+
+    // SERVER ---
+
+    void Server::OnServiceSearchRequest(const ServerSocket& socket, const PDU& request, const Handler& handlerCb)
+    {
+        PDU::errorid result = PDU::Success;
+        std::list<UUID> uuids;
+        uint16_t maxCount{};
+        uint16_t offset = 0;
+
+        request.InspectPayload([&](const Payload& payload) {
+
+            // ServiceSearchRequest frame format:
+            // - ServiceSearchPattern (sequence of UUIDs)
+            // - MaximumServiceRecordCount (word)
+            // - ContinuationState
+
+            // In this server implementation the continuation state is a word
+            // value containing the index of last service sent in the previous
+            // call.
+
+            payload.Pop(use_descriptor, [&](const Payload& sequence) {
+
+                // No count stored, need to read until end of the sequence...
+
+                while (sequence.Available() >= 2 /* min UUID size */) {
+                    UUID uuid;
+
+                    sequence.Pop(use_descriptor, uuid);
+
+                    TRACE_L5("ServiceSearchPattern[%d]=%s ('%s')", uuids.size(), uuid.ToString().c_str()), ClassID(uuid).Name().c_str();
+
+                    if (uuid.IsValid() == true) {
+                        uuids.push_back(uuid);
+                    }
+                    else {
+                        TRACE_L1("SDP server: invalid UUID!");
+                        uuids.clear();
+                        break;
+                    }
+                }
+
+                if (sequence.Available() != 0) {
+                    TRACE_L1("SDP server: Unexpected data ServiceSearchRequest payload!");
+                    // Let's continue anyway...
+                }
+            });
+
+            payload.Pop(maxCount); // 0 if truncated, 0 is error
+
+            TRACE_L5("MaximumServiceRecordCount=%d", maxCount);
+
+            if ((uuids.empty() == true) || (maxCount == 0)) {
+                TRACE_L1("SDP server: Invalid ServiceSearchRequest parameters!");
+                result = PDU::InvalidRequestSyntax;
+            }
+            else if (payload.Available() >= sizeof(uint8_t)) {
+                uint8_t continuationSize;
+                payload.Pop(continuationSize);
+
+                if (continuationSize == sizeof(uint16_t)) {
+                    payload.Pop(offset);
+
+                    if (offset == 0) {
+                        TRACE_L1("SDP server: Invalid ServiceSearchRequest continuation state (zero)!");
+                        result = PDU::InvalidContinuationState;
+                    }
+                }
+                else if (continuationSize != 0) {
+                    TRACE_L1("SDP server: Invalid ServiceSearchRequest continuation size!");
+                    result = PDU::InvalidContinuationState;
+                }
+            }
+            else {
+                TRACE_L1("SDP server: Truncated ServiceSearchRequest payload!");
+                result = PDU::InvalidPduSize;
+            }
+        });
+
+        uint16_t count = 0;
+        std::list<uint32_t> handles;
+
+        if (result == PDU::Success) {
+
+            // Sca all matching handles, even if can't fit them all in response,
+            // because the total number of matches needs to be returned.
+
+            WithServiceTree([&](const Tree& tree) {
+                for (auto const& service : tree.Services()) {
+                    for (auto const& uuid : uuids) {
+
+                        if (service.Search(uuid) == true) {
+                            if ((count >= offset) && (handles.size() < maxCount)) {
+                                handles.push_back(service.Handle());
+                            }
+
+                            count++;
+                        }
+                    }
+                }
+            });
+
+            if (offset > count) {
+                TRACE_L1("SDP server: Invalid ServiceSearchRequest continuation state!");
+                result = PDU::InvalidContinuationState;
+            }
+        }
+
+        if (result == PDU::Success) {
+
+            // Cap the max count to the actual possible capacity.
+            maxCount = std::min<uint16_t>(maxCount, (Capacity(socket, request) - (2 * sizeof(uint32_t)) / sizeof(uint32_t)));
+            TRACE_L5("capacity=%d handles", maxCount);
+
+            handlerCb(PDU::ServiceSearchResponse, [&](Payload& payload) {
+
+                // ServiceSearchResponse frame format:
+                // - TotalServiceRecordCount (word)
+                // - CurrentServiceRecordCount (word)
+                // - ServiceRecordHandleList (list of longs, not sequence)
+                // - ContinuationState
+
+                payload.Push<uint16_t>(count);
+                payload.Push<uint16_t>(handles.size());
+                payload.Push(handles);
+
+                if ((offset + handles.size()) < count) {
+                    // Not all sent yet! Store offset for continuation.
+                    payload.Push<uint8_t>(sizeof(uint16_t));
+                    payload.Push<uint16_t>(offset + handles.size());
+                }
+                else {
+                    // All sent!
+                    payload.Push<uint8_t>(0);
+                }
+
+                TRACE_L1("SDP server: ServiceSearch found %d matching service(s) and will reply with %d service(s)", count, handles.size());
+            });
+        }
+        else {
+            TRACE_L1("SDP server: ServiceSearchRequest failed!");
+            handlerCb(result);
+        }
+    }
+
+    /* private */
+    void Server::InternalOnServiceSearchAttributeRequest(const PDU::pduid id,
+                                                         const std::function<PDU::errorid(const Payload&, std::list<uint32_t>&)>& inspectCb,
+                                                         const ServerSocket& socket,
+                                                         const PDU& request,
+                                                         const Handler& handlerCb)
+    {
+        // Again, ServiceAttribute and ServiceSearchAttribute are very similar,
+        // so use one method to handle both.
+
+        PDU::errorid result = PDU::Success;
+
+        uint16_t maxByteCount{};
+        std::list<uint32_t> attributeRanges;
+        std::list<uint32_t> handles;
+        uint16_t offset = 0;
+
+        request.InspectPayload([&](const Payload& payload) {
+
+            // ServiceAttributeRequest/ServiceSearch frame format:
+            // - ServiceRecordHandle (long) OR ServiceSearchPattern (sequence of UUIDs)
+            // - MaximumAttributeByteCount (word)
+            // - AttributeIDList (sequence of UUID ranges or UUIDs)
+            // - ContinuationState
+
+            // In this server implementation the continuation state is a word
+            // value containing the index of last attribute sent in the previous
+            // call.
+
+            if (inspectCb(payload, handles) == PDU::Success) {
+
+                payload.Pop(maxByteCount);
+                TRACE_L5("MaximumAttributeByteCount=%d", maxByteCount);
+
+                if (maxByteCount > 9 /* i.e. descriptors and one result entry */) {
+                    payload.Pop(use_descriptor, [&](const Payload& sequence) {
+                        while (sequence.Available() >= (sizeof(uint16_t) + 1)) {
+                            uint32_t range{};
+                            uint32_t size{};
+
+                            sequence.Pop(use_descriptor, range, &size);
+
+                            if (size == sizeof(uint32_t)) {
+                                // A range indeed.
+                                TRACE_L5("AttributeIDList[%d]=%04x..%04x", attributeRanges.size(), (range >> 16), (range & 0xFFFF));
+
+                                attributeRanges.push_back(range);
+                            }
+                            else if (size == sizeof(uint16_t)) {
+                                // Not a range, but single 16-bit UUID.
+                                TRACE_L5("AttributeIDList[%d]=%04x ('%s')", attributeRanges.size(), range, ClassID(UUID(range)).Name().c_str());
+
+                                attributeRanges.push_back((static_cast<uint16_t>(range) << 16) | static_cast<uint16_t>(range));
+                            }
+                            else {
+                                TRACE_L1("SDP server: Invalid UUID list!");
+                                result = PDU::InvalidRequestSyntax;
+                            }
+                        }
+
+                        if (sequence.Available() != 0) {
+                            TRACE_L1("SDP server: Unexpected data in Service(Search)AttributeRequest payload!");
+                        }
+                    });
+                }
+
+                if ((maxByteCount < 9) || (attributeRanges.empty() == true)) {
+                    TRACE_L1("SDP server: Invalid Service(Search)AttributeRequest parameters!");
+                    result = PDU::InvalidRequestSyntax;
+                }
+                else if (payload.Available() >= sizeof(uint8_t)) {
+                    uint8_t continuationSize;
+                    payload.Pop(continuationSize);
+
+                    if (continuationSize == sizeof(uint16_t)) {
+                        payload.Pop(offset);
+
+                        if (offset == 0) {
+                            TRACE_L1("SDP server: Invalid Service(Search)AttributeRequest continuation state (zero)!");
+                            result = PDU::InvalidContinuationState;
+                        }
+                    }
+                    else if (continuationSize != 0) {
+                        TRACE_L1("SDP server: Invalid Service(Search)AttributeRequest continuation size!");
+                        result = PDU::InvalidContinuationState;
+                    }
+                }
+                else {
+                    TRACE_L1("SDP server: Truncated Service(Search)AttributeRequest payload!");
+                    result = PDU::InvalidPduSize;
+                }
+            }
+        });
+
+        std::list<std::map<uint16_t, Buffer>> attributes;
+        uint16_t totalAttributes = 0;
+
+        if (result == PDU::Success) {
+
+            WithServiceTree([&](const Tree& tree) {
+
+                for (auto const& handle : handles) {
+                    const Service* service = tree.Find(handle);
+
+                    if (service != nullptr) {
+                        attributes.emplace_back(SerializeAttributesByRange(*service, attributeRanges, offset, totalAttributes));
+                    }
+                }
+            });
+
+            if (result == PDU::Success) {
+
+                // Cap the max count to the actual possible capacity.
+                maxByteCount = std::min<uint16_t>(maxByteCount, (Capacity(socket, request) - sizeof(uint16_t)));
+                TRACE_L5("capacity=%d bytes", maxByteCount);
+
+                handlerCb(id, [&](Payload& payload) {
+
+                    // ServiceAttributeResponse/ServiceSearchAttribute frame format:
+                    // - AttributeListByteCount (word)
+                    // - AttributeList (sequence of long:data pairs, where data size is dependant on the attribute and may be a sequence)
+                    // - ContinuationState
+
+                    bool allDone = true;
+                    uint16_t attributesWritten = 0;
+
+                    auto PushLists = [&](Payload& buffer) {
+                        for (auto const& service : attributes) {
+                            buffer.Push(use_descriptor, [&](Payload& sequence) {
+                                for (auto const& attr : service) {
+                                    if ((sequence.Position() + attr.second.size() + sizeof(uint16_t)) < maxByteCount) {
+
+                                        if (attr.second.size() != 0) {
+                                            sequence.Push([&](Payload& record) {
+                                                record.Push(use_descriptor, attr.first);
+                                                record.Push(attr.second); // Already packed as necessary, thus no use_descriptor here.
+                                            });
+
+                                            attributesWritten++;
+                                        }
+                                    }
+                                    else {
+                                        allDone = false;
+                                        break;
+                                    }
+                                }
+                            });
+
+                            if (allDone == false) {
+                                break;
+                            }
+                        }
+                    };
+
+                    payload.Push(use_length, [&](Payload& buffer) {
+                        if (id == PDU::ServiceAttributeResponse) {
+                            ASSERT(handles.size() == 1);
+                            PushLists(buffer);
+                        }
+                        else {
+                            // In case of ServiceSearchAtributes this is a list of lists.
+                            buffer.Push(use_descriptor, [&](Payload& listBuffer) {
+                                PushLists(listBuffer);
+                            });
+                        }
+                    });
+
+                    if (allDone == false) {
+                        payload.Push<uint8_t>(sizeof(uint16_t));
+                        payload.Push<uint16_t>(offset + attributesWritten);
+                    }
+                    else {
+                        payload.Push<uint8_t>(0);
+                    }
+
+                    TRACE_L1("SDP server: Service(Search)Attribute found %d attribute(s) and will reply with %d attribute(s)", totalAttributes, attributesWritten);
+                });
+            }
+        }
+        else {
+            TRACE_L1("SDP server: Service(Search)Attribute failed!");
+            handlerCb(result);
+        }
+    }
+
+    void Server::OnServiceAttributeRequest(const ServerSocket& socket, const PDU& request, const Handler& handlerCb)
+    {
+        InternalOnServiceSearchAttributeRequest(PDU::ServiceAttributeResponse,
+        [&](const Payload& payload, std::list<uint32_t>& handles) -> PDU::errorid {
+
+            // ServiceAttributeRequest frame format:
+            // - ServiceRecordHandle (long)
+            // - MaximumAttributeByteCount (word)
+            // - AttributeIDList (sequence of UUID ranges or UUIDs)
+            // - ContinuationState
+
+            uint32_t handle{};
+            payload.Pop(handle); // 0 if truncated
+
+            TRACE_L1("ServiceRecordHandle=0x%08x", handle);
+
+            if (handle != 0) {
+                // Easy, one handle is given, directly.
+                handles.push_back(handle);
+            }
+
+            // MaximumAttributeByteCount, AttributeIDList and ContinuationState is handled by InternalOnServiceSearchAttributeRequest().
+
+            return (PDU::Success);
+
+        }, socket, request, handlerCb);
+    }
+
+    void Server::OnServiceSearchAttributeRequest(const ServerSocket& socket, const PDU& request, const Handler& handlerCb)
+    {
+        InternalOnServiceSearchAttributeRequest(PDU::ServiceSearchAttributeResponse,
+        [&](const Payload& payload, std::list<uint32_t>& handles) -> PDU::errorid {
+
+            // ServiceSearchAttribute frame format:
+            // - ServiceSearchPattern (sequence of UUIDs)
+            // - MaximumAttributeByteCount (word)
+            // - AttributeIDList (sequence of UUID ranges or UUIDs)
+            // - ContinuationState
+
+            std::list<UUID> uuids;
+
+            // Pick up UUIDs of interest...
+            payload.Pop(use_descriptor, [&](const Payload& sequence) {
+                while (sequence.Available() >= 2 /* min UUID size */) {
+                    UUID uuid;
+
+                    sequence.Pop(use_descriptor, uuid);
+
+                    TRACE_L1("ServiceSearchPattern[%d]=%s '%s'", uuids.size(), uuid.ToString().c_str(), ClassID(uuid).Name().c_str());
+
+                    if (uuid.IsValid() == true) {
+                        uuids.push_back(uuid);
+                    }
+                    else {
+                        TRACE_L1("SDP server: Invalid UUID in ServiceSearchRequest payload!");
+                    }
+                }
+
+                if (sequence.Available() != 0) {
+                    TRACE_L1("SDP server: Unexpected data ServiceSearchRequest payload!");
+                }
+            });
+
+            if (uuids.empty() == false) {
+                // Now have to find the handles that have anything to do with the UUIDs recieved.
+
+                WithServiceTree([&](const Tree& tree) {
+                    for (auto const& service : tree.Services()) {
+                        for (auto const& uuid : uuids) {
+                            if (service.Search(uuid) == true) {
+                                handles.push_back(service.Handle());
+                            }
+                        }
+                    }
+                });
+            }
+
+            TRACE_L1("SDP server: Found %d service(s) matching the search patterns", handles.size());
+
+            return (uuids.empty() == true? PDU::InvalidRequestSyntax : PDU::Success);
+
+        }, socket, request, handlerCb);
+    }
+
+    /* private */
+    std::map<uint16_t, Buffer> Server::SerializeAttributesByRange(const Service& service, const std::list<uint32_t>& attributeRanges, const uint16_t offset, uint16_t& count) const
+    {
+        std::map<uint16_t, Buffer> attributes;
+
+        for (uint32_t range : attributeRanges) {
+            const uint16_t standardLeft = std::max<uint16_t>(Service::AttributeDescriptor::ServiceRecordHandle, (range >> 16));
+            const uint16_t standardRight = std::min<uint16_t>(Service::AttributeDescriptor::IconURL, (range & 0xFFFF));
+
+            // Universal attributes.
+            for (uint16_t id = standardLeft; id <= standardRight; id++) {
+                Buffer buffer = service.Serialize(id);
+
+                if (buffer.empty() == false) {
+                    if (count >= offset) {
+                        attributes.emplace(id, std::move(buffer));
+                    }
+
+                    count++;
+                }
+            }
+
+            // custom attributes
+            for (auto const& attr : service.Attributes()) {
+                if ((attr.Id() >= std::max<uint16_t>(0x100, (range >> 16))) && (attr.Id() <= (range & 0xFFFF))) {
+                    if (count >= offset) {
+                        attributes.emplace(attr.Id(), attr.Value());
+                    }
+
+                    count++;
+                }
+            }
+        }
+
+        return (attributes);
+    }
+
+} // namespace SDP
+
+} // namespace Bluetooth
 
 }

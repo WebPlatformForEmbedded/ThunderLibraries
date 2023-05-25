@@ -142,460 +142,87 @@ namespace SDP {
         return (offset);
     }
 
-    uint16_t ClientSocket::Command::Response::Deserialize(const uint16_t reqTransactionId, const uint8_t stream[], const uint16_t length)
+    uint16_t PDU::Serialize(uint8_t stream[], const uint16_t length) const
     {
-        uint16_t result = 0;
+        ASSERT(stream != nullptr);
 
-        CMD_DUMP("SDP client received", stream, length);
+        // The request must always fit into MTU!
+        ASSERT((HeaderSize + _payload.Length()) <= length);
 
-        if (length >= PDU::HEADER_SIZE) {
-            const Payload header(stream, PDU::HEADER_SIZE);
-            uint16_t transactionId{};
-            uint16_t payloadLength{};
+        DataRecordBE msg(stream, length, 0);
 
-            // Pick up the response header
-            header.Pop(_type);
-            header.Pop(transactionId);
-            header.Pop(payloadLength);
+        if (_errorCode != InProgress) {
+            msg.Push(_type);
+            msg.Push(_transactionId);
 
-            if (reqTransactionId == transactionId) {
-                if (length >= (header.Length() + payloadLength)) {
-                    const Payload parameters((stream + header.Length()), payloadLength);
-
-                    switch(_type) {
-                    case PDU::ErrorResponse:
-                        parameters.Pop(_status);
-                        break;
-                    case PDU::ServiceSearchResponse:
-                        // In order to tell if the packet is complete we need to parse the payload upfront,
-                        // so let's deserialize the data along the way, too.
-                        _status = DeserializeServiceSearchResponse(parameters);
-                        break;
-                    case PDU::ServiceAttributeResponse:
-                    case PDU::ServiceSearchAttributeResponse: // same response
-                        _status = DeserializeServiceAttributeResponse(parameters);
-                        break;
-                    default:
-                        _status = PDU::DeserializationFailed;
-                        break;
-                    }
-
-                    result = length;
-                } else {
-                    TRACE_L1("SDP response too short [%d]", length);
-                }
+            if (Type() == PDU::ErrorResponse) {
+                msg.Push<uint16_t>(2);
+                msg.Push(_errorCode);
             } else {
-                TRACE_L1("Unexpected transaction Id [%d vs %d]", reqTransactionId, transactionId);
+                msg.Push<uint16_t>(_payload.Length());
+                msg.Push(_payload);
             }
+
+            _errorCode = InProgress;
         }
 
-        return (result);
+        if (msg.Length() != 0) {
+            TRACE_L1("SDP: sent %s; result: %d", AsString().c_str(), _errorCode);
+        }
+
+        return (msg.Length());
     }
 
-    ClientSocket::PDU::errorid ClientSocket::Command::Response::DeserializeServiceSearchResponse(const Payload& params)
+    uint16_t PDU::Deserialize(const uint8_t stream[], const uint16_t length)
     {
-        PDU::errorid result = PDU::DeserializationFailed;
+        ASSERT(stream != nullptr);
 
-        ASSERT(Type() == PDU::ServiceSearchResponse);
+        DataRecordBE msg(stream, length);
+        bool truncated = false;
 
-        if (params.Length() >= 5) {
-            Payload payload;
-            uint16_t totalCount = 0;
-            uint16_t currentCount = 0;
+        _errorCode = Success;
 
-            params.Pop(totalCount);
-
-            // Pick up the payload, but not process it yet, wait until the chain of continued packets ends.
-            params.Pop(currentCount);
-            params.PopAssign(payload, (currentCount * sizeof(uint32_t)));
-            _payload.Push(payload);
-
-            // Get continuation data.
-            Payload::Continuation cont;
-            params.Pop(cont, _continuationData);
-
-            if (cont == Payload::Continuation::ABSENT) {
-                // No more continued packets, process all the concatenated payloads...
-                // The payload is a list of DWORD handles.
-                _payload.Pop(_handles, (_payload.Length() / sizeof(uint32_t)));
-                result = PDU::Success;
-            } else {
-                result = PDU::PacketContinuation;
-            }
+        if (msg.Available() >= sizeof(_type)) {
+            msg.Pop(_type);
         } else {
-            TRACE_L1("Truncated payload in ServiceSearchResponse [%d]", params.Length());
+            truncated = true;
         }
 
-        return (result);
-    }
-
-    ClientSocket::PDU::errorid ClientSocket::Command::Response::DeserializeServiceAttributeResponse(const Payload& params)
-    {
-        PDU::errorid result = PDU::DeserializationFailed;
-
-        ASSERT((Type() == PDU::ServiceAttributeResponse) || (Type() == PDU::ServiceSearchAttributeResponse));
-
-        if (params.Length() >= 2) {
-            uint16_t byteCount = 0;
-            Payload payload;
-
-            // Pick up the payload, but not process it yet, wait until the chain of continued packets ends.
-            params.Pop(byteCount);
-            params.PopAssign(payload, byteCount);
-            _payload.Push(payload);
-
-            // Get continuation data.
-            Payload::Continuation cont;
-            params.Pop(cont, _continuationData);
-
-            if (cont == Payload::Continuation::ABSENT) {
-                // No more continued packets, process all the concatenated payloads...
-                // The payload is a sequence of attribute:value pairs (where value can be a sequence too).
-
-                _payload.Pop(use_descriptor, [&](const Payload& sequence) {
-                    while (sequence.Available() > 2) {
-                        uint32_t attribute = 0;
-                        Buffer value;
-
-                        // Pick up the pair and store it.
-                        sequence.Pop(use_descriptor, attribute);
-                        sequence.Pop(use_descriptor, value);
-                        _attributes.emplace(attribute, value);
-                    }
-
-                    if (sequence.Available() == 0) {
-                        result = PDU::Success;
-                    }
-                });
-            } else {
-                result = PDU::PacketContinuation;
-            }
-        } else {
-            TRACE_L1("Truncated payload in ServiceAttributeResponse [%d]", params.Length());
-        }
-
-        return (result);
-    }
-
-    uint16_t ServerSocket::Request::Deserialize(const uint8_t stream[], const uint16_t length)
-    {
-        uint16_t result = 0;
-
-        if (length >= PDU::HEADER_SIZE) {
-            const Payload header(stream, PDU::HEADER_SIZE);
-            uint16_t payloadLength{};
-
-            // Pick up the response header
-            header.Pop(_type);
-            header.Pop(_transactionId);
-            header.Pop(payloadLength);
-
-            if (length >= (header.Length() + payloadLength)) {
-                const Payload parameters((stream + header.Length()), payloadLength);
-
-                switch(_type) {
-                case PDU::ServiceSearchRequest:
-                    _status = DeserializeServiceSearchRequest(parameters);
-                    break;
-                case PDU::ServiceAttributeRequest:
-                    _status = DeserializeServiceAttributeRequest(parameters);
-                    break;
-                case PDU::ServiceSearchAttributeRequest:
-                    _status = DeserializeServiceSearchAttributeRequest(parameters);
-                    break;
-                default:
-                    TRACE_L1("Unknown SDP request [%d]", _type);
-                    _status = PDU::DeserializationFailed;
-                    break;
-                }
-
-                result = length;
-            } else {
-                TRACE_L1("SDP request too short [%d]", length);
-            }
-        }
-
-        return (result);
-    }
-
-    ServerSocket::PDU::errorid SDP::ServerSocket::Request::DeserializeServiceSearchRequest(const Payload& params)
-    {
-        // ServiceSearchRequest frame format:
-        // - ServiceSearchPattern (sequence of UUIDs)
-        // - MaximumServiceRecordCount (word)
-        // - ContinuationState
-
-        PDU::errorid result = PDU::InvalidRequestSyntax;
-
-        if (params.Length() >= 2) {
-            std::list<UUID> services;
-            uint16_t maxServiceCount;
-
-            params.Pop(use_descriptor, [&](const Payload& sequence) {
-                while (sequence.Available() > 0) {
-                    UUID uuid;
-                    sequence.Pop(use_descriptor, uuid);
-                    services.push_back(uuid);
-                }
-            });
-
-            params.Pop(maxServiceCount); // no descriptor!
-
-            Payload::Continuation cont;
-            params.Pop(cont, _continuationData);
-
-            if (cont != Payload::Continuation::ABSENT) {
-                // TODO: Add continuation support to the server.
-                ASSERT(false && "Unexpected Continuation data as not supported in SDP server");
-                result = PDU::InvalidContinuationState;
-            } else {
-                result = PDU::Success;
-                _server.OnServiceSearch(_transactionId, services, maxServiceCount);
-            }
-        } else {
-            TRACE_L1("Truncated payload in ServiceSearchResponse [%d]", params.Length());
-        }
-
-        if (result != PDU::Success) {
-            _server.OnError(_transactionId, result);
-        }
-
-        return (result);
-    }
-
-    ServerSocket::PDU::errorid SDP::ServerSocket::Request::DeserializeServiceAttributeRequest(const Payload& params)
-    {
-        // ServiceAttributeRequest frame format:
-        // - ServiceRecordHandle (long)
-        // - MaximumAttributeByteCount (word)
-        // - ContinuationState
-
-        PDU::errorid result = PDU::InvalidRequestSyntax;
-
-        if (params.Length() >= 6) {
-            uint32_t handle;
-            uint16_t maxByteCount;
-            std::list<uint32_t> attributeRanges;
-
-            params.Pop(handle); // no descriptor!
-            params.Pop(maxByteCount); // no descriptor!
-
-            params.Pop(use_descriptor, [&](const Payload& sequence) {
-                while (sequence.Available() > 0) {
-                    uint32_t range{};
-                    uint32_t size{};
-
-                    sequence.Pop(use_descriptor, range, &size);
-
-                    if (size == 4) {
-                        attributeRanges.push_back(range);
-                    } else {
-                        // Not a range, but single 16-bit UUID
-                        attributeRanges.push_back((static_cast<uint16_t>(range) << 16) | static_cast<uint16_t>(range));
-                    }
-                }
-            });
-
-            Payload::Continuation cont;
-            params.Pop(cont, _continuationData);
-
-            if (cont != Payload::Continuation::ABSENT) {
-                // TODO: Add continuation support to the server.
-                ASSERT(false && "Unexpected Continuation data as not supported in SDP server");
-                result = PDU::InvalidContinuationState;
-            } else {
-                result = PDU::Success;
-                _server.OnServiceAttribute(_transactionId, handle, maxByteCount, attributeRanges);
-            }
-        } else {
-            TRACE_L1("Truncated payload in ServiceAttributeResponse [%d]", params.Length());
-        }
-
-        if (result != PDU::Success) {
-            _server.OnError(_transactionId, result);
-        }
-
-        return (result);
-    }
-
-    ServerSocket::PDU::errorid SDP::ServerSocket::Request::DeserializeServiceSearchAttributeRequest(const Payload& params)
-    {
-        // ServiceSearchAttributeRequest frame format:
-        // - ServiceSearchPattern (sequence of UUIDs)
-        // - MaximumAttributeByteCount (word)
-        // - AttributeIDList (sequence of UUID ranges or UUIDs)
-        // - ContinuationState
-
-        PDU::errorid result = PDU::InvalidRequestSyntax;
-
-        if (params.Length() >= 2) {
-            std::list<UUID> services;
-            std::list<uint32_t> attributeRanges;
-            uint16_t maxByteCount;
-
-            params.Pop(use_descriptor, [&](const Payload& sequence) {
-                while (sequence.Available() > 0) {
-                    UUID uuid;
-                    sequence.Pop(use_descriptor, uuid);
-                    services.push_back(uuid);
-                }
-            });
-
-            params.Pop(maxByteCount); // no descriptor!
-
-            params.Pop(use_descriptor, [&](const Payload& sequence) {
-                while (sequence.Available() > 0) {
-                    uint32_t range{};
-                    uint32_t size{};
-
-                    sequence.Pop(use_descriptor, range, &size);
-
-                    if (size == 4) {
-                        attributeRanges.push_back(range);
-                    } else {
-                        // Not a range, but single 16-bit UUID
-                        attributeRanges.push_back((static_cast<uint16_t>(range) << 16) | static_cast<uint16_t>(range));
-                    }
-                }
-            });
-
-            Payload::Continuation cont;
-            params.Pop(cont, _continuationData);
-
-            if (cont != Payload::Continuation::ABSENT) {
-                // TODO: Add continuation support to the server.
-                ASSERT(false && "Unexpected Continuation data as not supported in SDP server");
-                result = PDU::InvalidContinuationState;
-            } else {
-                result = PDU::Success;
-                _server.OnServiceSearchAttribute(_transactionId, services, maxByteCount, attributeRanges);
-            }
-        } else {
-            TRACE_L1("Truncated payload in ServiceAttributeResponse [%d]", params.Length());
-        }
-
-        if (result != PDU::Success) {
-            _server.OnError(_transactionId, result);
-        }
-
-        return (result);
-    }
-
-    void ServerSocket::Response::SerializeErrorResponse(PDU::errorid error)
-    {
-        // Error Response frame format
-        // - ErrorCode
-
-        const uint16_t errorCode = error;
-        uint8_t scratchPad[8];
-
-        Payload payload(scratchPad, sizeof(scratchPad), 0);
-        payload.Push(errorCode);
-
-        _pdu.Construct(PDU::ErrorResponse, payload);
-    }
-
-    void ServerSocket::Response::SerializeServiceSearchResponse(const std::list<UUID>& uuids, const uint16_t maxResults)
-    {
-        // ServiceSearchAttribute frame format:
-        // - TotalServiceRecordCount,
-        // - CurrentServiceRecordCount,
-        // - ServiceRecordHandleList,
-        // - ContinuationState
-
-        uint8_t scratchPad[1024];
-        Payload payload(scratchPad, sizeof(scratchPad), 0);
-
-        std::list<uint32_t> handles;
-        for (const UUID& uuid : uuids) {
-            std::list<uint32_t> serviceHandles;
-            _server.Services(uuid, serviceHandles);
-            handles.splice(handles.end(), serviceHandles);
-        }
-
-        const uint16_t totalResults = handles.size();
-        const uint16_t results = std::min(totalResults, maxResults);
-        payload.Push(totalResults);
-        payload.Push(results);
-
-        auto it = handles.cbegin();
-        for (uint16_t i = 0; i < results; i++) {
-            payload.Push((*it++));
-        }
-
-        // In practice no continuation information - this response is always complete.
-        _pdu.Construct(PDU::ServiceSearchResponse, payload);
-    }
-
-    void ServerSocket::Response::SerializeServiceAttributeResponse(const uint32_t serviceHandle , const uint16_t maxBytes,  const std::list<uint32_t>& attributeRanges)
-    {
-        uint8_t scratchPad[1024];
-        Payload payload(scratchPad, sizeof(scratchPad), 0);
-
-        payload.Push(use_length /* no descriptor! */, [&](Payload& payload) {
-            payload.Push(use_descriptor, [&](Payload& sequence) {
-                for (const uint32_t range : attributeRanges) {
-                    _server.Serialize(serviceHandle, std::pair<uint16_t, uint16_t>(range >> 16, range), [&](const uint16_t id, const Buffer& buffer) {
-                        if (buffer.size() != 0) {
-                            sequence.Push([&](Payload& record) {
-                                record.Push(use_descriptor, id);
-                                record.Push(buffer); // no descriptor here!
-                            });
-                        }
-                    });
-                }
-            });
-        });
-
-        if (payload.Length() > maxBytes) {
-            ASSERT(false && "ServiceAttribute response exceeded maxBytes");
-            // TODO: Add continuation support to the server.
-            SerializeErrorResponse(PDU::InsufficientResources); // for the lack of a better error code...
-        } else {
-            _pdu.Construct(PDU::ServiceAttributeResponse, payload);
-        }
-    }
-
-    void ServerSocket::Response::SerializeServiceSearchAttributeResponse(const std::list<UUID>& uuids, uint16_t maxBytes, const std::list<uint32_t>& attributeRanges)
-    {
-        // ServiceSearchAttribute frame format:
-        // - AttributeListsByteCount (word)
-        // - AttributeLists (sequences of sequences of sequences of attribute id and attribute data)
-        // - ContinuationState
-
-        uint8_t scratchPad[1024];
-        Payload payload(scratchPad, sizeof(scratchPad), 0);
-
-        payload.Push(use_length /* no descriptor! */, [&](Payload& payload) {
-            payload.Push(use_descriptor, [&](Payload& payload) {
-                for (const UUID& uuid : uuids) {
-                    payload.Push(use_descriptor, [&](Payload& sequence) {
-                        std::list<uint32_t> handles;
-                        _server.Services(uuid, handles);
-                        for (const uint32_t handle : handles) {
-                            for (const uint32_t range : attributeRanges) {
-                                _server.Serialize(handle, std::pair<uint16_t, uint16_t>(range >> 16, range), [&](const uint16_t id, const Buffer& buffer) {
-                                    if (buffer.size() != 0) {
-                                        sequence.Push([&](Payload& record) {
-                                            record.Push(use_descriptor, id);
-                                            record.Push(buffer); // no descriptor here!
-                                        });
-                                    }
-                                });
+        if (truncated == false) {
+            if (msg.Available() >= (sizeof(_transactionId) + sizeof(uint16_t))) {
+                msg.Pop(_transactionId);
+
+                uint16_t payloadLength{};
+                msg.Pop(payloadLength);
+
+                if (payloadLength > 0) {
+                    if (msg.Available() >= payloadLength) {
+                        if (Type() == PDU::ErrorResponse) {
+                            if (payloadLength >= 2) {
+                                msg.Pop(_errorCode);
+                            } else {
+                                truncated = true;
                             }
+                        } else {
+                            msg.Pop(_payload, payloadLength);
                         }
-                    });
+                    } else {
+                        truncated = true;
+                    }
                 }
-            });
-        });
-
-        if (payload.Length() > maxBytes) {
-            ASSERT(false && "ServiceSearchAttribute response exceeded maxBytes");
-            // TODO: Add continuation support to the server.
-            SerializeErrorResponse(PDU::InsufficientResources); // for the lack of a better error code...
-        } else {
-            _pdu.Construct(PDU::ServiceSearchAttributeResponse, payload);
+            } else {
+                truncated = true;
+            }
         }
+
+        if (truncated == true) {
+            TRACE_L1("SDP: Message was truncated");
+            _errorCode = DeserializationFailed;
+        }
+
+        TRACE_L1("SDP: received %s; result: %d", AsString().c_str(), _errorCode);
+
+        return (length);
     }
 
 } // namespace SDP

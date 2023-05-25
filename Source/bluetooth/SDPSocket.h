@@ -30,13 +30,14 @@ namespace Bluetooth {
 
 namespace SDP {
 
+    static constexpr uint8_t PSM = 1;
+    static constexpr uint16_t SocketBufferSize = 2048;
+
     struct EXTERNAL use_descriptor_t { explicit use_descriptor_t() = default; };
     constexpr use_descriptor_t use_descriptor = use_descriptor_t{}; // tag for selecting a proper overload
 
     struct EXTERNAL use_length_t { explicit use_length_t() = default; };
     constexpr use_length_t use_length = use_length_t{};
-
-    static constexpr DefaultScratchpadSize = 1024;
 
     class EXTERNAL Payload : public DataRecordBE {
     public:
@@ -79,29 +80,6 @@ namespace SDP {
         using DataRecordBE::PopAssign;
 
         ~Payload() = default;
-
-    public:
-        void Push(const Continuation cont, const Buffer& data = Buffer())
-        {
-            if (cont == Continuation::ABSENT) {
-                Push(static_cast<uint8_t>(0));
-            } else {
-                ASSERT((data.length() > 0) && (data.length() <= 16));
-                Push(static_cast<uint8_t>(data.length()));
-                Push(data);
-            }
-        }
-        void Pop(Continuation& cont, Buffer& data) const
-        {
-            uint8_t size = 0;
-            Pop(size);
-            cont = (size == 0? Continuation::ABSENT : Continuation::FOLLOWS);
-            if (size != 0) {
-                Pop(data, size);
-            } else {
-                data.clear();
-            }
-        }
 
     public:
         void Push(use_descriptor_t)
@@ -167,7 +145,7 @@ namespace SDP {
         void Push(use_length_t, const Buffer& sequence, const bool = false)
         {
             ASSERT(sequence.size() < 0x10000);
-            Push(static_cast<uint16_t>(sequence.size()));
+            Push<uint16_t>(sequence.size());
             if (sequence.size() != 0) {
                 Push(sequence);
             }
@@ -202,7 +180,7 @@ namespace SDP {
             Push(tag, sequence, alternative);
         }
         template<typename TYPE>
-        void Push(const std::list<TYPE>& list, const bool alternative = false, const uint16_t scratchPadSize = 2048)
+        void Push(const std::list<TYPE>& list, const uint16_t scratchPadSize = 2048)
         {
             if (list.size() != 0) {
                 ASSERT(Free() >= (list.size() * sizeof(TYPE)));
@@ -210,7 +188,7 @@ namespace SDP {
                     for (const auto& item : list) {
                         sequence.Push(item);
                     }
-                }, alternative, scratchPadSize);
+                }, scratchPadSize);
             }
         }
         template<typename TYPE>
@@ -291,6 +269,23 @@ namespace SDP {
             }
         }
         template<typename TYPE>
+        void Pop(std::vector<TYPE>& vect, const uint16_t count) const
+        {
+            if (Available() >= (count * sizeof(TYPE))) {
+                vect.reserve(count);
+
+                uint16_t i = count;
+                while (i-- > 0) {
+                    TYPE item;
+                    Pop(item);
+                    vect.push_back(item);
+                }
+            } else {
+                TRACE_L1("SDP: Truncated payload while reading a vector");
+                _readerOffset = _writerOffset;
+            }
+        }
+        template<typename TYPE>
         void Pop(std::list<TYPE>& list, const uint16_t count) const
         {
             if (Available() >= (count * sizeof(TYPE))) {
@@ -301,18 +296,23 @@ namespace SDP {
                     list.push_back(item);
                 }
             } else {
-                TRACE_L1("SDP: Truncated payload");
+                TRACE_L1("SDP: Truncated payload while reading a list");
                 _readerOffset = _writerOffset;
             }
         }
         template<typename TYPE>
         void Pop(use_descriptor_t, std::list<TYPE>& list, const uint16_t count) const
         {
-            uint16_t i = count;
-            while (i-- > 0) {
-                TYPE item;
-                Pop(use_descriptor, item);
-                list.push_back(item);
+            if (Available() >= (count * sizeof(TYPE))) {
+                uint16_t i = count;
+                while (i-- > 0) {
+                    TYPE item;
+                    Pop(use_descriptor, item);
+                    list.push_back(item);
+                }
+}            else {
+                TRACE_L1("SDP: Truncated payload while reading a list");
+                _readerOffset = _writerOffset;
             }
         }
         void Pop(use_descriptor_t, Bluetooth::UUID& uuid) const
@@ -337,7 +337,7 @@ namespace SDP {
                     }
                     _readerOffset += size;
                 } else {
-                    TRACE_L1("SDP: Truncated payload");
+                    TRACE_L1("SDP: Truncated payload while reading UUID");
                     _readerOffset = _writerOffset;
                 }
             } else {
@@ -356,7 +356,7 @@ namespace SDP {
                     inspector(sequence);
                     _readerOffset += size;
                 } else {
-                    TRACE_L1("SDP: Truncated payload");
+                    TRACE_L1("SDP: Truncated payload while reading a sequence");
                     _readerOffset = _writerOffset;
                 }
             } else {
@@ -374,7 +374,7 @@ namespace SDP {
                 element.assign(&_buffer[_readerOffset], (descriptorSize + elemSize));
                 _readerOffset += (descriptorSize + elemSize);
             } else {
-                TRACE_L1("SDP: Truncated payload");
+                TRACE_L1("SDP: Truncated payload while reading a sequence");
                 _readerOffset = _writerOffset;
             }
         }
@@ -385,7 +385,32 @@ namespace SDP {
                 element.assign(&_buffer[_readerOffset], size);
                 _readerOffset += size;
             } else {
-                TRACE_L1("SDP: Truncated payload");
+                TRACE_L1("SDP: Truncated payload while reading a buffer");
+                _readerOffset = _writerOffset;
+            }
+        }
+        void Pop(use_length_t, const Inspector& inspector) const
+        {
+            uint16_t size{};
+            Pop(size);
+            if (Available() >= size) {
+                Payload sequence(&_buffer[_readerOffset], size);
+                inspector(sequence);
+                _readerOffset += size;
+            } else {
+                TRACE_L1("SDP: Truncated payload while reading a buffer");
+                _readerOffset = _writerOffset;
+            }
+        }
+        void Pop(use_length_t, Buffer& element) const
+        {
+            uint16_t size{};
+            Pop(size);
+            if (Available() >= size) {
+                element.assign(&_buffer[_readerOffset], size);
+                _readerOffset += size;
+            } else {
+                TRACE_L1("SDP: Truncated payload while reading a buffer");
                 _readerOffset = _writerOffset;
             }
         }
@@ -410,424 +435,195 @@ namespace SDP {
         uint8_t ReadDescriptor(elementtype& type, uint32_t& size) const;
     }; // class Payload
 
-    class EXTERNAL ClientSocket : public Core::SynchronousChannelType<Core::SocketPort> {
+    class EXTERNAL PDU {
     public:
-        static constexpr uint8_t SDP_PSM = 1;
+        static constexpr uint8_t HeaderSize = 5;
+        static constexpr uint8_t MaxContinuationSize = 16;
+
+    public:
+        enum pduid : uint8_t {
+            Invalid = 0,
+            ErrorResponse = 1,
+            ServiceSearchRequest = 2,
+            ServiceSearchResponse = 3,
+            ServiceAttributeRequest = 4,
+            ServiceAttributeResponse = 5,
+            ServiceSearchAttributeRequest = 6,
+            ServiceSearchAttributeResponse = 7,
+        };
+
+        enum errorid : uint16_t {
+            Success = 0,
+            UnsupportedSdpVersion = 1,
+            InvalidServiceRecordHandle = 2,
+            InvalidRequestSyntax = 3,
+            InvalidPduSize = 4,
+            InvalidContinuationState = 5,
+            InsufficientResources = 6,
+            Reserved = 255,
+            InProgress,
+            SerializationFailed,
+            DeserializationFailed,
+        };
+
+    public:
+        PDU(const PDU&) = delete;
+        PDU& operator=(const PDU&) = delete;
+        ~PDU() = default;
+
+        explicit PDU(const uint16_t bufferSize = SocketBufferSize)
+            : _buffer(new uint8_t[bufferSize])
+            , _payload(_buffer.get(), bufferSize, 0)
+            , _type(Invalid)
+            , _transactionId(~0)
+            , _errorCode(Reserved)
+        {
+            ASSERT(bufferSize > (HeaderSize + (1 /* continuation length */) + MaxContinuationSize));
+            ASSERT(_buffer.get() != nullptr);
+        }
+
+    public:
+        string AsString() const
+        {
+#ifdef __DEBUG__
+            const char* labels[] = { "Invalid", "ErrorResponse", "ServiceSearchRequest", "ServiceSearchResponse", "ServiceAttributeRequest",
+                                   "ServiceAttributeResponse", "ServiceSearchAttributeRequest", "ServiceSearchAttributeResponse" };
+
+            ASSERT(Type() <= ServiceSearchAttributeResponse);
+            return (Core::Format("PDU #%d '%s'", _transactionId, labels[_type]));
+#else
+            return (Core::Format("PDU #%d type %d", _transactionId, _type));
+#endif
+        }
+
+    public:
+        bool IsValid() const {
+            return ((Type() != Invalid) && (TransactionId() != static_cast<uint16_t>(~0)));
+        }
+        pduid Type() const {
+            return (_type);
+        }
+        uint16_t TransactionId() const {
+            return (_transactionId);
+        }
+        errorid Error() const {
+            return (_errorCode);
+        }
+        uint16_t Capacity() const {
+            return (_payload.Capacity());
+        }
+
+    public:
+        void InspectPayload(const Payload::Inspector& inspectorCb) const
+        {
+            ASSERT(inspectorCb != nullptr);
+
+            _payload.Rewind();
+            inspectorCb(_payload);
+        }
+
+    public:
+        void Reload() const
+        {
+            _payload.Rewind();
+        }
+        void Clear()
+        {
+            _payload.Clear();
+            _type = Invalid;
+            _transactionId = -1;
+            _errorCode = Reserved;
+        }
+        void Set(const uint16_t transactionId, const pduid type, const Payload::Builder& buildCb)
+        {
+            _errorCode = SerializationFailed;
+            _transactionId = transactionId;
+            _type = type;
+            _payload.Clear();
+
+            if (buildCb != nullptr) {
+                buildCb(_payload);
+            }
+        }
+
+    public:
+        uint16_t Serialize(uint8_t stream[], const uint16_t length) const;
+        uint16_t Deserialize(const uint8_t stream[], const uint16_t length);
 
     private:
-        class Callback : public Core::IOutbound::ICallback
-        {
-        public:
-            Callback() = delete;
-            Callback(const Callback&) = delete;
-            Callback& operator= (const Callback&) = delete;
+        std::unique_ptr<uint8_t[]> _buffer;
+        Payload _payload;
+        pduid _type;
+        uint16_t _transactionId;
+        mutable errorid _errorCode;
+    }; // class PDU
 
-            Callback(ClientSocket& parent)
-                : _parent(parent)
-            {
-            }
-            ~Callback() = default;
-
-        public:
-            void Updated(const Core::IOutbound& data, const uint32_t error_code) override
-            {
-                _parent.CommandCompleted(data, error_code);
-            }
-
-        private:
-            ClientSocket& _parent;
-        }; // class Callback
-
+    class EXTERNAL ClientSocket : public Core::SynchronousChannelType<Core::SocketPort> {
     public:
         static constexpr uint32_t CommunicationTimeout = 2000; /* 2 seconds. */
 
-        class EXTERNAL PDU {
-        public:
-            static constexpr uint8_t HEADER_SIZE = 5;
-            static constexpr uint8_t MAX_CONTINUATION_INFO_SIZE = 16;
-            static constexpr uint16_t DEFAULT_SCRATCHPAD_SIZE = 4096;
-
-        public:
-            enum pduid : uint8_t {
-                Invalid = 0,
-                ErrorResponse = 1,
-                ServiceSearchRequest = 2,
-                ServiceSearchResponse = 3,
-                ServiceAttributeRequest = 4,
-                ServiceAttributeResponse = 5,
-                ServiceSearchAttributeRequest = 6,
-                ServiceSearchAttributeResponse = 7,
-            };
-
-            enum errorid : uint16_t {
-                Success = 0,
-                UnsupportedSdpVersion = 1,
-                InvalidServiceRecordHandle = 2,
-                InvalidRequestSyntax = 3,
-                InvalidPduSize = 4,
-                InvalidContinuationState = 5,
-                InsufficientResources = 6,
-                Reserved = 255,
-                DeserializationFailed,
-                PacketContinuation
-            };
-
-        public:
-            static constexpr uint16_t MIN_BUFFER_SIZE = (HEADER_SIZE + 1 + MAX_CONTINUATION_INFO_SIZE);
-            static constexpr uint16_t DEFAULT_BUFFER_SIZE = (HEADER_SIZE + DEFAULT_SCRATCHPAD_SIZE + MAX_CONTINUATION_INFO_SIZE);
-
-        public:
-            explicit PDU(const uint16_t bufferSize)
-                : _bufferSize(bufferSize)
-                , _buffer(static_cast<uint8_t*>(::malloc(_bufferSize)))
-                , _size(0)
-                , _transactionId(-1)
-                , _continuationOffset(0)
-                , _payloadSize(0)
-            {
-                ASSERT(_buffer != nullptr);
-                ASSERT(_bufferSize > MIN_BUFFER_SIZE);
-            }
-            ~PDU()
-            {
-                ::free(_buffer);
-            }
-
-        public:
-            void Clear()
-            {
-                ::memset(_buffer, 0, HEADER_SIZE);
-                _size = 0;
-                _continuationOffset = 0;
-                _payloadSize = 0;
-            }
-            bool IsValid() const
-            {
-                return ((_buffer != nullptr) && (_bufferSize > MIN_BUFFER_SIZE) && (Type() != Invalid));
-            }
-            uint32_t Length() const
-            {
-                return (_size);
-            }
-            uint16_t Capacity() const
-            {
-                return (_bufferSize - MIN_BUFFER_SIZE);
-            }
-            const uint8_t* Data() const
-            {
-                return (_buffer);
-            }
-            pduid Type() const
-            {
-                return (static_cast<pduid>(_buffer[0]));
-            }
-            uint16_t TransactionId() const
-            {
-                return ((_buffer[1] << 8) | _buffer[2]);
-            }
-            void NextTransaction(const uint16_t id = ~0)
-            {
-                if (id != static_cast<uint16_t>(~0)) {
-                    _transactionId = id;
-                } else {
-                    _transactionId++;
-                }
-            }
-            void Finalize(const Buffer& continuation = Buffer())
-            {
-                // Called during command construction or by retrigger due to continuation
-                ASSERT(_size >= HEADER_SIZE);
-                ASSERT(_continuationOffset >= HEADER_SIZE);
-
-                // Increment transaction ID
-                _buffer[1] = (_transactionId >> 8);
-                _buffer[2] = _transactionId;
-
-                // Update size
-                const uint16_t payloadSize = (_payloadSize + 1 + continuation.size());
-                _buffer[3] = (payloadSize >> 8);
-                _buffer[4] = payloadSize;
-
-                if (Type() != PDU::ErrorResponse) {
-                    // Attach continuation information
-                    _buffer[_continuationOffset] = continuation.size();
-                    ::memcpy(_buffer + _continuationOffset + 1, continuation.data(), continuation.size());
-                    _size = (HEADER_SIZE + payloadSize);
-                }
-            }
-            void Construct(const pduid type, const Payload& parameters)
-            {
-                ASSERT(Capacity() >= (parameters.Length() + MIN_BUFFER_SIZE));
-
-                Clear();
-
-                if (Capacity() >= (parameters.Length() + MIN_BUFFER_SIZE)) {
-                    ::memset(_buffer, 0, HEADER_SIZE);
-                    ::memcpy(_buffer + HEADER_SIZE, parameters.Data(), parameters.Length());
-                    _buffer[0] = type;
-                    _payloadSize = parameters.Length();
-                    _size = (HEADER_SIZE + _payloadSize);
-                    _continuationOffset = _size;
-
-                    Finalize();
-                } else {
-                    TRACE(Trace::Error, (_T("Parameters to large to fit in PDU [%d]"), parameters.Length()));
-                }
-            }
-            void Construct(const pduid type, const Payload::Builder& Build, const uint32_t scratchPadSize = DEFAULT_SCRATCHPAD_SIZE)
-            {
-                uint8_t* scratchPad = static_cast<uint8_t*>(ALLOCA(scratchPadSize));
-                Payload parameters(scratchPad, scratchPadSize, 0);
-                Build(parameters);
-                Construct(type, parameters);
-            }
-
-        private:
-            uint16_t _bufferSize;
-            uint8_t* _buffer;
-            uint16_t _size;
-            uint16_t _transactionId;
-            uint16_t _continuationOffset;
-            uint16_t _payloadSize;
-        }; // class PDU
-
-        class EXTERNAL Outward {
-        public:
-            Outward() = delete;
-            Outward(const Outward&) = delete;
-            Outward& operator=(const Outward&) = delete;
-
-            explicit Outward(uint16_t pduBufferSize)
-                : _pdu(pduBufferSize)
-                , _offset(0)
-            {
-                ASSERT(pduBufferSize >= PDU::MIN_BUFFER_SIZE);
-            }
-            ~Outward() = default;
-
-        public:
-            void Reload() const
-            {
-                _offset = 0;
-            }
-            bool IsValid() const
-            {
-                return (_pdu.IsValid());
-            }
-            uint16_t Serialize(uint8_t stream[], const uint16_t length) const
-            {
-                ASSERT(stream != nullptr);
-
-                uint16_t result = std::min(static_cast<uint16_t>(_pdu.Length() - _offset), length);
-                if (result > 0) {
-                    ::memcpy(stream, (_pdu.Data() + _offset), result);
-                    _offset += result;
-                }
-                return (result);
-            }
-            void Finalize(const Buffer& cont)
-            {
-                _pdu.NextTransaction();
-                _pdu.Finalize(cont);
-            }
-            uint16_t TransactionId() const
-            {
-                return (_pdu.TransactionId());
-            }
-            void NextTransaction(const uint16_t id)
-            {
-                _pdu.NextTransaction(id);
-            }
-
-        protected:
-            PDU _pdu;
-            mutable uint16_t _offset;
-        }; // class Outward
-
-        class EXTERNAL Inward {
-        private:
-            Inward() = delete;
-            Inward(const Inward&) = delete;
-            Inward& operator=(const Inward&) = delete;
-
-        public:
-            explicit Inward(uint32_t payloadSize)
-                : _type(PDU::Invalid)
-                , _status(PDU::Reserved)
-                , _transactionId(-1)
-                , _scratchPad(static_cast<uint8_t*>(::malloc(payloadSize)))
-                , _payload(_scratchPad, payloadSize)
-            {
-                ASSERT(payloadSize >= PDU::MIN_BUFFER_SIZE);
-                ASSERT(_scratchPad != nullptr);
-            }
-            ~Inward()
-            {
-                ::free(_scratchPad);
-            }
-
-        public:
-            void Clear()
-            {
-                _status = PDU::Reserved;
-                _type = PDU::Invalid;
-                _continuationData.clear();
-                _payload.Clear();
-            }
-            PDU::pduid Type() const
-            {
-                return (_type);
-            }
-            PDU::errorid Status() const
-            {
-                return (_status);
-            }
-            const Buffer& Continuation() const
-            {
-                return (_continuationData);
-            }
-            uint16_t TransactionId() const
-            {
-                return (_transactionId);
-            }
-
-        protected:
-            PDU::pduid _type;
-            PDU::errorid _status;
-            uint16_t _transactionId;
-            uint8_t* _scratchPad;
-            Payload _payload;
-            Buffer _continuationData;
-        }; // class Inward
-
         class EXTERNAL Command : public Core::IOutbound, public Core::IInbound {
         public:
-            class EXTERNAL Request : public Outward {
+            class EXTERNAL Request : public PDU {
             public:
-                Request() = delete;
                 Request(const Request&) = delete;
                 Request& operator=(const Request&) = delete;
-
-                explicit Request(const uint16_t pduBufferSize)
-                    : Outward(pduBufferSize)
-                {
-                }
                 ~Request() = default;
 
+                Request()
+                    : PDU()
+                    , _counter(~0)
+                {
+                }
+
             public:
-                void ServiceSearch(const std::list<UUID>& services, const uint16_t maxResults)
-                {
-                    ASSERT((services.size() > 0) && (services.size() <= 12)); // As per spec
-                    ASSERT(maxResults > 0);
+                using PDU::Set;
 
-                    _pdu.NextTransaction();
-                    _pdu.Construct(PDU::ServiceSearchRequest, [&](Payload& parameters) {
-                        parameters.Push(use_descriptor, services);
-                        parameters.Push(maxResults);
-                    });
-                }
-                void ServiceAttribute(const uint32_t serviceHandle, const std::list<uint32_t>& attributeIdRanges)
+                void Set(const PDU::pduid type, const Payload::Builder& buildCb = nullptr)
                 {
-                    ASSERT(serviceHandle != 0);
-                    ASSERT((attributeIdRanges.size() > 0) && (attributeIdRanges.size() <= 256));
-
-                    _pdu.NextTransaction();
-                    _pdu.Construct(PDU::ServiceAttributeRequest, [&](Payload& parameters) {
-                        parameters.Push(serviceHandle);
-                        parameters.Push(_pdu.Capacity());
-                        parameters.Push(use_descriptor, attributeIdRanges);
-                    });
+                    Set(Counter(), type, buildCb);
                 }
-                void ServiceSearchAttribute(const std::list<UUID>& services, const std::list<uint32_t>& attributeIdRanges)
-                {
-                    ASSERT((services.size() > 0) && (services.size() <= 12));
-                    ASSERT((attributeIdRanges.size() > 0) && (attributeIdRanges.size() <= 256));
 
-                    _pdu.NextTransaction();
-                    _pdu.Construct(PDU::ServiceSearchAttributeRequest, [&](Payload& parameters) {
-                        parameters.Push(use_descriptor, services);
-                        parameters.Push(_pdu.Capacity());
-                        parameters.Push(use_descriptor, attributeIdRanges);
-                    });
+            private:
+                uint16_t Counter() const {
+                    return (++_counter);
                 }
+
+            private:
+                mutable uint16_t _counter;
             }; // class Request
 
         public:
-            class EXTERNAL Response : public Inward {
+            class EXTERNAL Response : public PDU {
             public:
                 Response(const Response&) = delete;
                 Response& operator=(const Response&) = delete;
-
-                explicit Response(uint32_t payloadSize)
-                    : Inward(payloadSize)
-                {
-                }
-
                 ~Response() = default;
 
-            public:
-                void Clear()
+                Response()
+                    : PDU()
                 {
-                    Inward::Clear();
-                    _handles.clear();
-                    _attributes.clear();
                 }
-                const std::list<uint32_t>& Handles() const
-                {
-                    return (_handles);
-                }
-                const std::map<uint16_t, Buffer>& Attributes() const
-                {
-                    return (_attributes);
-                }
-
-                uint16_t Deserialize(const uint16_t reqTransactionId, const uint8_t stream[], const uint16_t length);
-
-            private:
-                PDU::errorid DeserializeServiceSearchResponse(const Payload& params);
-                PDU::errorid DeserializeServiceAttributeResponse(const Payload& params);
-
-            private:
-                std::list<uint32_t> _handles;
-                std::map<uint16_t, Buffer> _attributes;
             }; // class Response
 
         public:
             Command(const Command&) = delete;
             Command& operator=(const Command&) = delete;
 
-            Command()
-                : _status(~0)
-                , _request(PDU::DEFAULT_BUFFER_SIZE)
-                , _response(PDU::DEFAULT_BUFFER_SIZE)
+            Command(ClientSocket& socket)
+                : _request()
+                , _response()
+                , _socket(socket)
             {
             }
             ~Command() = default;
 
         public:
-            void ServiceSearch(const UUID& serviceId, const uint16_t maxResults = 256) // single
-            {
-                ServiceSearch(std::list<UUID>{serviceId}, maxResults);
-            }
-            void ServiceSearch(const std::list<UUID>& services, const uint16_t maxResults = 256) // list
+            template<typename... Args>
+            void Set(Args&&... args)
             {
                 _response.Clear();
-                _status = ~0;
-                _request.ServiceSearch(services, maxResults);
-            }
-            void ServiceAttribute(const uint32_t serviceHandle) // all
-            {
-                ServiceAttribute(serviceHandle, std::list<uint32_t>{0x0000FFFF});
-            }
-            void ServiceAttribute(const uint32_t serviceHandle, const uint16_t attributeId) // single
-            {
-                ServiceAttribute(serviceHandle, std::list<uint32_t>{(static_cast<uint32_t>(attributeId) << 16) | attributeId});
-            }
-            void ServiceAttribute(const uint32_t serviceHandle, const std::list<uint32_t>& attributeIdRanges) // ranges
-            {
-                _response.Clear();
-                _status = ~0;
-                _request.ServiceAttribute(serviceHandle, attributeIdRanges);
+                _request.Set(std::forward<Args>(args)...);
             }
 
         public:
@@ -838,17 +634,13 @@ namespace SDP {
             {
                 return (_response);
             }
-            uint32_t Status() const
+            const Request& Call() const
             {
-                return(_status);
+                return (_request);
             }
             bool IsValid() const
             {
                 return (_request.IsValid());
-            }
-            void Status(const uint32_t code)
-            {
-                _status = code;
             }
 
         private:
@@ -860,7 +652,7 @@ namespace SDP {
             {
                 ASSERT(stream != nullptr);
 
-                const uint16_t result = _request.Serialize(stream, length);
+                const uint16_t result = _request.Serialize(stream, std::min(_socket.OutputMTU(), length));
 
                 if (result != 0) {
                     CMD_DUMP("SDP client send", stream, result);
@@ -874,113 +666,46 @@ namespace SDP {
 
                 CMD_DUMP("SDP client received", stream, length);
 
-                uint16_t result = _response.Deserialize(_request.TransactionId(), stream, length);
-                if ((_response.Continuation().empty() == false)) {
-                    // Data transmission is not complete yet, so update transaction ID and continuation information
-                    _request.Finalize(_response.Continuation());
-                }
-                return (result);
+                return (_response.Deserialize(stream, length));
             }
             Core::IInbound::state IsCompleted() const override
             {
-                if (_response.Continuation().empty() == false) {
-                    return (Core::IInbound::RESEND);
-                } else {
-                    return (_response.Type() != PDU::Invalid? Core::IInbound::COMPLETED : Core::IInbound::INPROGRESS);
-                }
+                return (Core::IInbound::COMPLETED);
             }
 
         private:
-            uint32_t _status;
             Request _request;
             Response _response;
+            ClientSocket& _socket;
         }; // class Command
-
-    private:
-        typedef std::function<void(const Command&)> Handler;
-
-        class Entry {
-        public:
-            Entry() = delete;
-            Entry(const Entry&) = delete;
-            Entry& operator= (const Entry&) = delete;
-            Entry(const uint32_t waitTime, Command& cmd, const Handler& handler)
-                : _waitTime(waitTime)
-                , _cmd(cmd)
-                , _handler(handler)
-            {
-            }
-            ~Entry() = default;
-
-        public:
-            Command& Cmd()
-            {
-                return (_cmd);
-            }
-            uint32_t WaitTime() const
-            {
-                return (_waitTime);
-            }
-            bool operator==(const Core::IOutbound* rhs) const
-            {
-                return (rhs == &_cmd);
-            }
-            bool operator!=(const Core::IOutbound* rhs) const
-            {
-                return (!operator==(rhs));
-            }
-            void Completed(const uint32_t error_code)
-            {
-                _cmd.Status(error_code);
-                _handler(_cmd);
-            }
-
-        private:
-            uint32_t _waitTime;
-            Command& _cmd;
-            Handler _handler;
-        }; // class Entry
 
     public:
         ClientSocket(const ClientSocket&) = delete;
         ClientSocket& operator=(const ClientSocket&) = delete;
+        ~ClientSocket() = default;
 
         ClientSocket(const Core::NodeId& localNode, const Core::NodeId& remoteNode)
-            : Core::SynchronousChannelType<Core::SocketPort>(SocketPort::SEQUENCED, localNode, remoteNode, 1024, 2048)
+            : Core::SynchronousChannelType<Core::SocketPort>(SocketPort::SEQUENCED,
+                        localNode, remoteNode, SocketBufferSize, SocketBufferSize)
             , _adminLock()
-            , _callback(*this)
-            , _queue()
+            , _omtu(0)
         {
         }
         ClientSocket(const SOCKET& connector, const Core::NodeId& remoteNode)
-            : Core::SynchronousChannelType<Core::SocketPort>(SocketPort::SEQUENCED, connector, remoteNode, 1024, 2048)
+            : Core::SynchronousChannelType<Core::SocketPort>(SocketPort::SEQUENCED,
+                        connector, remoteNode, SocketBufferSize, SocketBufferSize)
             , _adminLock()
-            , _callback(*this)
-            , _queue()
+            , _imtu(0)
+            , _omtu(0)
         {
         }
-        ~ClientSocket() = default;
 
     public:
-        void Execute(const uint32_t waitTime, Command& cmd, const Handler& handler)
-        {
-            _adminLock.Lock();
-
-            if (cmd.IsValid() == true) {
-                _queue.emplace_back(waitTime, cmd, handler);
-                if (_queue.size() == 1) {
-                    Send(waitTime, cmd, &_callback, &cmd);
-                }
-            } else {
-                cmd.Status(Core::ERROR_BAD_REQUEST);
-                handler(cmd);
-            }
-
-            _adminLock.Unlock();
+        uint16_t InputMTU() const {
+            return (_omtu);
         }
-        void Revoke(const Command& cmd)
-        {
-            Revoke(cmd);
+        uint16_t OutputMTU() const {
+            return (_omtu);
         }
 
     private:
@@ -991,114 +716,132 @@ namespace SDP {
             Core::SynchronousChannelType<Core::SocketPort>::StateChange();
 
             if (IsOpen() == true) {
-                socklen_t len = sizeof(_connectionInfo);
-                ::getsockopt(Handle(), SOL_L2CAP, L2CAP_CONNINFO, &_connectionInfo, &len);
+                struct l2cap_options options{};
+                socklen_t len = sizeof(options);
+
+                ::getsockopt(Handle(), SOL_L2CAP, L2CAP_OPTIONS, &options, &len);
+
+                ASSERT(options.omtu <= SendBufferSize());
+                ASSERT(options.imtu <= ReceiveBufferSize());
+
+                TRACE(Trace::Information, (_T("SDP channel input MTU: %d, output MTU: %d"), options.imtu, options.omtu));
+
+                _omtu = options.omtu;
+                _imtu = options.imtu;
 
                 Operational(true);
+
             } else {
                 Operational(false);
+
+                _omtu = 0;
+                _imtu = 0;
             }
         }
 
-        uint16_t Deserialize(const uint8_t stream[] VARIABLE_IS_NOT_USED, const uint16_t length VARIABLE_IS_NOT_USED) override
+        uint16_t Deserialize(const uint8_t stream[] VARIABLE_IS_NOT_USED, const uint16_t length) override
         {
-            TRACE_L1("Not expecting SDP requests on this socket!");
-            return (0);
-        }
-
-        void CommandCompleted(const Core::IOutbound& data, const uint32_t error_code)
-        {
-            _adminLock.Lock();
-
-            if ((_queue.size() == 0) || (*(_queue.begin()) != &data)) {
-                ASSERT(false && "Always the first one should be the one to be handled!!");
-            } else {
-                _queue.begin()->Completed(error_code);
-                _queue.erase(_queue.begin());
-
-                if (_queue.size() > 0) {
-                    Entry& entry(*(_queue.begin()));
-                    Command& cmd (entry.Cmd());
-
-                    Send(entry.WaitTime(), cmd, &_callback, &cmd);
-                }
+            if (length != 0) {
+                TRACE_L1("SDP: Unexpected data for deserialization [%d bytes]", length);
+                CMD_DUMP("SDP client received unexpected", stream, length);
             }
 
-            _adminLock.Unlock();
+            return (length);
         }
 
-    private:
+     private:
         Core::CriticalSection _adminLock;
-        Callback _callback;
-        std::list<Entry> _queue;
-        struct l2cap_conninfo _connectionInfo;
+        uint16_t _imtu;
+        uint16_t _omtu;
     }; // class ClientSocket
 
     class EXTERNAL ServerSocket : public ClientSocket {
+    public:
+        class EXTERNAL ResponseHandler {
+        public:
+            ResponseHandler(const ResponseHandler&) = default;
+            ResponseHandler& operator=(const ResponseHandler&) = default;
+            ~ResponseHandler() = default;
+
+            ResponseHandler(const std::function<void(const PDU::pduid newId, const Payload::Builder&)>& acceptor,
+                            const std::function<void(const PDU::errorid)>& rejector)
+                : _acceptor(acceptor)
+                , _rejector(rejector)
+            {
+            }
+
+        public:
+            void operator ()(const PDU::pduid newId, const Payload::Builder& buildCb = nullptr) const
+            {
+                _acceptor(newId, buildCb);
+            }
+            void operator ()(const PDU::errorid result) const
+            {
+                _rejector(result);
+            }
+
+        private:
+            std::function<void(const PDU::pduid newId, const Payload::Builder& buildCb)> _acceptor;
+            std::function<void(const PDU::errorid)> _rejector;
+        }; // class ResponseHandler
+
     private:
-        class EXTERNAL Request : public Inward {
+        class EXTERNAL Request : public PDU {
         public:
             Request(const Request&) = delete;
             Request& operator=(const Request&) = delete;
-
-        public:
-            Request(ServerSocket& server, const uint16_t payloadSize)
-                : Inward(payloadSize)
-                , _server(server)
-            {
-            }
             ~Request() = default;
 
-        public:
-            uint16_t Deserialize(const uint8_t stream[], const uint16_t length);
-
-        private:
-            PDU::errorid DeserializeServiceSearchRequest(const Payload& params);
-            PDU::errorid DeserializeServiceAttributeRequest(const Payload& params);
-            PDU::errorid DeserializeServiceSearchAttributeRequest(const Payload& params);
-
-        private:
-            ServerSocket& _server;
+            Request()
+                : PDU()
+            {
+            }
         }; // class Request
 
-        class EXTERNAL Response : public Outward, public Core::IOutbound  {
+        class EXTERNAL Response : public PDU, public Core::IOutbound  {
         public:
-            Response(const Request&) = delete;
+            Response(const Response&) = delete;
             Response& operator=(const Response&) = delete;
-
-            Response(ServerSocket& server, const uint16_t pduBufferSize)
-                : Outward(pduBufferSize)
-                , _server(server)
+            Response(ServerSocket& socket)
+                : PDU()
+                , _socket(socket)
             {
             }
             ~Response() = default;
 
         public:
+            using PDU::Set;
+
+            void Set(const uint16_t transactionId, PDU::errorid code)
+            {
+                Set(transactionId, PDU::ErrorResponse, [code](Payload& payload) {
+                    payload.Push(code);
+                });
+            }
+
+        public:
+            const ServerSocket& Socket() const {
+                return (_socket);
+            }
+
+        public:
             void Reload() const override
             {
-                Outward::Reload();
+                PDU::Reload();
             }
             uint16_t Serialize(uint8_t stream[], const uint16_t length) const override
             {
-                ASSERT(stream != nullptr);
-
-                const uint16_t result = Outward::Serialize(stream, length);
+                const uint16_t result = PDU::Serialize(stream, std::min(_socket.OutputMTU(), length));
 
                 if (result != 0) {
-                    CMD_DUMP("SDP server send", stream, result);
+                    CMD_DUMP("SDP server sent", stream, result);
                 }
 
                 return (result);
             }
 
-        public:
-            void SerializeErrorResponse(PDU::errorid error);
-            void SerializeServiceSearchResponse(const std::list<UUID>& serviceUuids, const uint16_t maxResults);
-            void SerializeServiceAttributeResponse(const uint32_t serviceHandle, const uint16_t maxBytes, const std::list<uint32_t>& ranges);
-            void SerializeServiceSearchAttributeResponse(const std::list<UUID>& serviceUuids, uint16_t maxBytes, const std::list<uint32_t>& ranges);
-
         private:
-            ServerSocket& _server;
+            ServerSocket& _socket;
         }; // class Response
 
     public:
@@ -1107,14 +850,14 @@ namespace SDP {
 
         ServerSocket(const Core::NodeId& localNode, const Core::NodeId& remoteNode)
             : ClientSocket(localNode, remoteNode)
-            , _request(*this, PDU::DEFAULT_BUFFER_SIZE)
-            , _response(*this, PDU::DEFAULT_BUFFER_SIZE)
+            , _request()
+            , _response(*this)
         {
         }
         ServerSocket(const SOCKET& connector, const Core::NodeId& remoteNode)
             : ClientSocket(connector, remoteNode)
-            , _request(*this, PDU::DEFAULT_BUFFER_SIZE)
-            , _response(*this, PDU::DEFAULT_BUFFER_SIZE)
+            , _request()
+            , _response(*this)
         {
         }
         ~ServerSocket() = default;
@@ -1122,45 +865,43 @@ namespace SDP {
     public:
         uint16_t Deserialize(const uint8_t stream[], const uint16_t length) override
         {
-            // This is a SDP request from a client.
+            uint16_t result = 0;
+
             CMD_DUMP("SDP server received", stream, length);
-            return (_request.Deserialize(stream, length));
+
+            result = _request.Deserialize(stream, length);
+
+            if (result != 0) {
+                Received(_request, _response);
+                _request.Clear();
+            }
+
+            return (result);
+        }
+
+    private:
+        void Received(const Request& request, Response& response)
+        {
+            if (request.IsValid() == true) {
+                OnPDU(*this, request, ResponseHandler(
+                    [&](const PDU::pduid newId, const Payload::Builder& buildCb) {
+                        TRACE_L1("SDP server: accepting %s", request.AsString().c_str());
+                        response.Set(request.TransactionId(), newId, buildCb);
+                    },
+                    [&](const PDU::errorid result) {
+                        TRACE_L1("SDP server: rejecting %s, reason: %d", request.AsString().c_str(), result);
+                        response.Set(request.TransactionId(), result);
+                    }));
+            } else {
+                TRACE_L1("SDP server: Invalid request!");
+                response.Set(request.TransactionId(), PDU::InvalidRequestSyntax);
+            }
+
+            Send(CommunicationTimeout, response, nullptr, nullptr);
         }
 
     protected:
-        virtual void Services(const UUID& uuid, std::list<uint32_t>& serviceHandles) = 0;
-        virtual void Serialize(const uint32_t serviceHandle, const std::pair<uint16_t, uint16_t>& range,
-                                std::function<void(const uint16_t id, const Buffer& buffer)> store) const = 0;
-
-    private:
-        void OnError(const uint16_t transactionId, const PDU::errorid error)
-        {
-            _response.NextTransaction(transactionId);
-            _response.SerializeErrorResponse(error);
-            Reply(_response);
-        }
-        void OnServiceSearch(const uint16_t transactionId, const std::list<UUID>& uuids, const uint16_t maxResults)
-        {
-            _response.NextTransaction(transactionId);
-            _response.SerializeServiceSearchResponse(uuids, maxResults);
-            Reply(_response);
-        }
-        void OnServiceAttribute(const uint16_t transactionId, const uint32_t serviceHandle, uint16_t maxBytes, const std::list<uint32_t>& attributeRanges)
-        {
-            _response.NextTransaction(transactionId);
-            _response.SerializeServiceAttributeResponse(serviceHandle, maxBytes, attributeRanges);
-            Reply(_response);
-        }
-        void OnServiceSearchAttribute(const uint16_t transactionId, const std::list<UUID>& uuids, uint16_t maxBytes, const std::list<uint32_t>& attributeRanges)
-        {
-            _response.NextTransaction(transactionId);
-            _response.SerializeServiceSearchAttributeResponse(uuids, maxBytes, attributeRanges);
-            Reply(_response);
-        }
-        void Reply(Response& response)
-        {
-            Send(CommunicationTimeout, response, nullptr, nullptr);
-        }
+        virtual void OnPDU(const ServerSocket& socket, const PDU& request, const ResponseHandler& handler) = 0;
 
     private:
         Request _request;
