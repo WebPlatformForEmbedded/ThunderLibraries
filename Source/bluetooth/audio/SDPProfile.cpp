@@ -18,6 +18,8 @@
  */
 
 #include "Module.h"
+
+#include "SDPSocket.h"
 #include "SDPProfile.h"
 
 namespace WPEFramework {
@@ -269,7 +271,7 @@ namespace SDP {
                             payload.Pop(continuationDataLength);
 
                             if ((continuationDataLength > 16) || (payload.Available() < continuationDataLength)) {
-                                TRACE_L("SDP: Invalid continuation data in ServiceSearchResponse!");
+                                TRACE_L1("SDP: Invalid continuation data in ServiceSearchResponse!");
                                 result = Core::ERROR_BAD_REQUEST;
                             }
                             else if (continuationDataLength > 0) {
@@ -497,7 +499,7 @@ namespace SDP {
 
                     sequence.Pop(use_descriptor, uuid);
 
-                    TRACE_L5("ServiceSearchPattern[%d]=%s ('%s')", uuids.size(), uuid.ToString().c_str()), ClassID(uuid).Name().c_str();
+                    TRACE_L5("ServiceSearchPattern[%d]=%s ('%s')", uuids.size(), uuid.ToString().c_str(), ClassID(uuid).Name().c_str());
 
                     if (uuid.IsValid() == true) {
                         uuids.push_back(uuid);

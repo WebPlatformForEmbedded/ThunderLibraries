@@ -17,23 +17,6 @@
  * limitations under the License.
  */
 
-#pragma once
+#include "Module.h"
 
-#ifndef MODULE_NAME
-#define MODULE_NAME Bluetooth 
-#endif
-
-#include <core/core.h>
-#include <messaging/messaging.h>
-
-#include <../include/bluetooth/bluetooth.h>
-#include <../include/bluetooth/hci.h>
-#include <../include/bluetooth/mgmt.h>
-#include <../include/bluetooth/l2cap.h>
-
-#include "Debug.h"
-
-#if defined(__WINDOWS__) && defined(BLUETOOTH_EXPORTS)
-#undef EXTERNAL
-#define EXTERNAL EXTERNAL_EXPORT
-#endif
+MODULE_NAME_DECLARATION(BUILD_REFERENCE)

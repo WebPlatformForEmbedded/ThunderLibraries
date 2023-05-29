@@ -22,55 +22,28 @@ find_package(${NAMESPACE}Core REQUIRED)
 find_package(${NAMESPACE}Messaging REQUIRED)
 find_package(CompileSettingsDebug CONFIG REQUIRED)
 
-project(${NAMESPACE}Bluetooth)
+project(${NAMESPACE}BluetoothGATT)
 project_version(1.0.0)
 set(TARGET ${PROJECT_NAME})
 message("Setup ${TARGET} v${PROJECT_VERSION}")
 
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
-
-option(BCM43XX "Select the serial driver for bluetooth modules found on RaspberryPi's" OFF)
-option(GATT_SUPPORT "Include GATT support" ON)
-option(AUDIO_SUPPORT "Include audio sink/source support" ON)
-
-find_package(Bluez5UtilHeaders REQUIRED)
-find_package(BCM_HOST QUIET)
-find_package(NEXUS QUIET)
-
-if(BCM_HOST_FOUND)
-   set(BCM43XX ON)
-endif()
+set(PUBLIC_HEADERS
+    GATTSocket.h
+    GATTProfile.h
+    Module.h
+    bluetooth_gatt.h
+)
 
 add_library(${TARGET} SHARED
-    HCISocket.cpp
-    UUID.cpp
-    Definitions.cpp
-    BluetoothUtils.cpp
-    Module.cpp
+    GATTSocket.cpp
+    GATTProfile.cpp
 )
-
-set(PUBLIC_HEADERS
-    IDriver.h
-    HCISocket.h
-    UUID.h
-    Debug.h
-    BluetoothUtils.h
-    Module.h
-    bluetooth.h
-)
-
-if(BCM43XX)
-    target_sources(${TARGET} PRIVATE drivers/BCM43XX.cpp)
-else()
-    target_sources(${TARGET} PRIVATE drivers/Basic.cpp)
-endif()
 
 target_link_libraries(${TARGET}
     PRIVATE
         CompileSettingsDebug::CompileSettingsDebug
         ${NAMESPACE}Core::${NAMESPACE}Core
         ${NAMESPACE}Messaging::${NAMESPACE}Messaging
-        Bluez5UtilHeaders::Bluez5UtilHeaders
 )
 
 set_target_properties(${TARGET}
@@ -116,23 +89,15 @@ install(
     LIBRARY DESTINATION lib COMPONENT libs      # shared lib
     RUNTIME DESTINATION bin COMPONENT libs      # binaries
     FRAMEWORK DESTINATION bin COMPONENT libs    # for mac
-    PUBLIC_HEADER DESTINATION include/${NAMESPACE}/bluetooth COMPONENT devel   # headers for mac (note the different component -> different package)
+    PUBLIC_HEADER DESTINATION include/${NAMESPACE}/bluetooth/gatt COMPONENT devel
     INCLUDES DESTINATION include/${NAMESPACE}   # default include path
 )
 
 InstallPackageConfig(
     TARGETS ${TARGET}
-    DESCRIPTION "Bluetooth library"
+    DESCRIPTION "Bluetooth GATT library"
 )
 
 InstallCMakeConfig(
     TARGETS ${TARGET}
 )
-
-if(GATT_SUPPORT)
-    add_subdirectory(gatt)
-endif()
-
-if(AUDIO_SUPPORT)
-    add_subdirectory(audio)
-endif()

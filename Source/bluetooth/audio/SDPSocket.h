@@ -20,9 +20,7 @@
 #pragma once
 
 #include "Module.h"
-#include "UUID.h"
 #include "DataRecord.h"
-
 
 namespace WPEFramework {
 

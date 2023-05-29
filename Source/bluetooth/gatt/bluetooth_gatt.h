@@ -20,20 +20,13 @@
 #pragma once
 
 #ifndef MODULE_NAME
-#define MODULE_NAME Bluetooth 
+#error "Please define a MODULE_NAME that describes the binary/library you are building."
 #endif
 
-#include <core/core.h>
-#include <messaging/messaging.h>
+#include <bluetooth/bluetooth.h>
+#include "GATTSocket.h"
+#include "GATTProfile.h"
 
-#include <../include/bluetooth/bluetooth.h>
-#include <../include/bluetooth/hci.h>
-#include <../include/bluetooth/mgmt.h>
-#include <../include/bluetooth/l2cap.h>
-
-#include "Debug.h"
-
-#if defined(__WINDOWS__) && defined(BLUETOOTH_EXPORTS)
-#undef EXTERNAL
-#define EXTERNAL EXTERNAL_EXPORT
+#ifdef __WINDOWS__
+#pragma comment(lib, "bluetoothgatt.lib")
 #endif

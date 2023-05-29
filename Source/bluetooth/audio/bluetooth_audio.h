@@ -2,7 +2,7 @@
  * If not stated otherwise in this file or this component's LICENSE file the
  * following copyright and licenses apply:
  *
- * Copyright 2020 Metrological
+ * Copyright 2023 Metrological
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,20 +20,20 @@
 #pragma once
 
 #ifndef MODULE_NAME
-#define MODULE_NAME Bluetooth 
+#error "Please define a MODULE_NAME that describes the binary/library you are building."
 #endif
 
-#include <core/core.h>
-#include <messaging/messaging.h>
+#include <bluetooth/bluetooth.h>
+#include "SDPSocket.h"
+#include "SDPProfile.h"
+#include "AVDTPSocket.h"
+#include "AVDTPProfile.h"
+#include "RTPSocket.h"
+#include "DataRecord.h"
 
-#include <../include/bluetooth/bluetooth.h>
-#include <../include/bluetooth/hci.h>
-#include <../include/bluetooth/mgmt.h>
-#include <../include/bluetooth/l2cap.h>
+#include "IAudioCodec.h"
+#include "IAudioContentProtection.h"
 
-#include "Debug.h"
-
-#if defined(__WINDOWS__) && defined(BLUETOOTH_EXPORTS)
-#undef EXTERNAL
-#define EXTERNAL EXTERNAL_EXPORT
+#ifdef __WINDOWS__
+#pragma comment(lib, "bluetoothaudio.lib")
 #endif

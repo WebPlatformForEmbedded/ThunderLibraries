@@ -2,7 +2,7 @@
  * If not stated otherwise in this file or this component's LICENSE file the
  * following copyright and licenses apply:
  *
- * Copyright 2020 Metrological
+ * Copyright 2023 Metrological
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,20 +20,20 @@
 #pragma once
 
 #ifndef MODULE_NAME
-#define MODULE_NAME Bluetooth 
+#define MODULE_NAME Bluetooth_Audio 
 #endif
 
 #include <core/core.h>
 #include <messaging/messaging.h>
 
 #include <../include/bluetooth/bluetooth.h>
-#include <../include/bluetooth/hci.h>
-#include <../include/bluetooth/mgmt.h>
 #include <../include/bluetooth/l2cap.h>
 
-#include "Debug.h"
+#include "../Debug.h"
+#include "../UUID.h"
 
 #if defined(__WINDOWS__) && defined(BLUETOOTH_EXPORTS)
 #undef EXTERNAL
 #define EXTERNAL EXTERNAL_EXPORT
 #endif
+
