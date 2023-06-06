@@ -5,6 +5,5 @@
         "BLUETOOTH": "OFF",
         "BROADCAST": "OFF",
         "COMPOSITOR_BUFFER": "OFF",
-        "PRIVILEDGED_REQUEST": "OFF"
     }
 }
