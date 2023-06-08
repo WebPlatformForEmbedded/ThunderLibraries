@@ -16,7 +16,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  **/
-#include <compositorbuffer/BufferType.h>
+#include <compositorbuffer/CompositorBufferType.h>
 
 using namespace WPEFramework;
 
@@ -29,13 +29,16 @@ const char* descriptors[] = {
 
 const char bridgeConnector[] = _T("/tmp/connector");
 
-class CompositorBuffer : public WPEFramework::Compositor::BufferType<4>, public Core::IReferenceCounted {
+class CompositorBuffer : public WPEFramework::Compositor::CompositorBufferType<4>, public Core::IReferenceCounted {
 private:
-    using BaseClass = WPEFramework::Compositor::BufferType<4>;
+    using BaseClass = WPEFramework::Compositor::CompositorBufferType<4>;
 
 protected:
-    CompositorBuffer(const string& callsign, const uint32_t id, const uint32_t width, const uint32_t height, const uint32_t format, const uint64_t modifier)
-        : BaseClass(callsign, id, width, height, format, modifier)
+    CompositorBuffer(const string& callsign, const uint32_t id, 
+        const uint32_t width, const uint32_t height, 
+        const uint32_t format, const uint64_t modifier, 
+        const Exchange::ICompositionBuffer::DataType type)
+        : BaseClass(callsign, id, width, height, format, modifier, type)
     {
 
         printf("Constructing server buffer.\n");
@@ -57,11 +60,11 @@ public:
     CompositorBuffer(const CompositorBuffer&) = delete;
     CompositorBuffer& operator=(const CompositorBuffer&) = delete;
 
-    static Core::ProxyType<CompositorBuffer> Create(const string& callsign, const uint32_t width, const uint32_t height)
+    static Core::ProxyType<CompositorBuffer> Create(const string& callsign, const uint32_t width, const uint32_t height, const Exchange::ICompositionBuffer::DataType type)
     {
         static uint32_t id = 1;
         uint32_t identifier = Core::InterlockedIncrement(id);
-        return (_map.Instance<CompositorBuffer>(callsign, callsign, identifier, width, height, 0xAA, 0x55));
+        return (_map.Instance<CompositorBuffer>(callsign, callsign, identifier, width, height, 0xAA, 0x55, type));
     }
     static Core::ProxyType<CompositorBuffer> Find(const string& callsign)
     {
@@ -87,9 +90,9 @@ private:
 
 /* static */ Core::ProxyMapType<string, CompositorBuffer> CompositorBuffer::_map;
 
-class ClientBuffer : public WPEFramework::Compositor::BufferType<4>, public Core::IReferenceCounted {
+class ClientBuffer : public WPEFramework::Compositor::CompositorBufferType<4>, public Core::IReferenceCounted {
 private:
-    using BaseClass = WPEFramework::Compositor::BufferType<4>;
+    using BaseClass = WPEFramework::Compositor::CompositorBufferType<4>;
 
 protected:
     ClientBuffer(const uint32_t id, Core::PrivilegedRequest::Container& descriptors)
@@ -103,10 +106,10 @@ public:
     ClientBuffer(const ClientBuffer&) = delete;
     ClientBuffer& operator=(const ClientBuffer&) = delete;
 
-    static IBuffer* Create(const uint32_t id, Core::PrivilegedRequest::Container& descriptors)
+    static Exchange::ICompositionBuffer* Create(const uint32_t id, Core::PrivilegedRequest::Container& descriptors)
     {
         Core::ProxyType<ClientBuffer> element(Core::ProxyType<ClientBuffer>::Create(id, descriptors));
-        IBuffer* result = &(*element);
+        Exchange::ICompositionBuffer* result = &(*element);
         result->AddRef();
         return (result);
     }
@@ -128,7 +131,7 @@ public:
     Dispatcher() = default;
     ~Dispatcher() override = default;
 
-    void Add(const uint32_t id, WPEFramework::Compositor::BufferType<4>& buffer)
+    void Add(const uint32_t id, WPEFramework::Compositor::CompositorBufferType<4>& buffer)
     {
         _id = id;
         _buffer = &buffer;
@@ -159,7 +162,7 @@ public:
 
 private:
     uint32_t _id;
-    WPEFramework::Compositor::BufferType<4>* _buffer;
+    WPEFramework::Compositor::CompositorBufferType<4>* _buffer;
 };
 
 } // namespace Test
@@ -207,14 +210,15 @@ int main(int argc, const char* argv[])
         printf("Running as: [%s]\n", server ? _T("server") : _T("client"));
         Test::Dispatcher bridge;
         Core::ProxyType<Test::CompositorBuffer> serverBuffer;
-        ::Compositor::Interfaces::IBuffer* buffer = nullptr;
+        
+        Exchange::ICompositionBuffer* buffer = nullptr;
 
         if (server == true) {
-            serverBuffer = Test::CompositorBuffer::Create(_T("TestCall"), 1024, 1080);
+            serverBuffer = Test::CompositorBuffer::Create(_T("TestCall"), 1024, 1080, Exchange::ICompositionBuffer::TYPE_RAW);
             buffer = &(*serverBuffer);
             bridge.Open(string(Test::bridgeConnector));
-            printf("Server has created a buffer, known as: [%d]\n", buffer->Identifier());
-            bridge.Add(buffer->Identifier(), *serverBuffer);
+            printf("Server has created a buffer, known as: [%d]\n", bufferId);
+            bridge.Add(bufferId, *serverBuffer);
         } else {
             printf("Client instantiated to get information of buffer: [%d]\n", bufferId);
         }
@@ -248,7 +252,8 @@ int main(int argc, const char* argv[])
                     printf("Width:  %d\n", buffer->Width());
                     printf("Height: %d\n", buffer->Height());
                     printf("Format: %d\n", buffer->Format());
-                    WPEFramework::Compositor::BufferType<4>* info = dynamic_cast<WPEFramework::Compositor::BufferType<4>*>(buffer);
+                    printf("Type: %d\n", buffer->Type());
+                    WPEFramework::Compositor::CompositorBufferType<4>* info = dynamic_cast<WPEFramework::Compositor::CompositorBufferType<4>*>(buffer);
                     if (info != nullptr) {
                         printf("Dirty:  %s\n", info->IsDirty() ? _T("true") : _T("false"));
                     }
@@ -258,11 +263,12 @@ int main(int argc, const char* argv[])
                 if (buffer == nullptr) {
                     printf("There are no buffers\n");
                 } else {
-                    ::Compositor::Interfaces::IBuffer::IIterator* planes = buffer->Planes(10);
+                    Exchange::ICompositionBuffer::IIterator* planes = buffer->Planes(10);
+
                     if (planes != nullptr) {
                         printf("Iterating ove the planes to write:\n");
                         while (planes->Next() == true) {
-                            ::Compositor::Interfaces::IBuffer::IPlane* plane = planes->Plane();
+                            Exchange::ICompositionBuffer::IPlane* plane = planes->Plane();
                             ASSERT(plane != nullptr);
                             int fd = static_cast<int>(plane->Accessor());
                             printf("Writing to [%d]:\n", fd);
@@ -270,6 +276,7 @@ int main(int argc, const char* argv[])
                             ::fsync(fd);
                         }
                     }
+                    
                     buffer->Completed(true);
                 }
                 break;

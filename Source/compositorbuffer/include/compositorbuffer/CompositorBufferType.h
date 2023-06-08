@@ -16,28 +16,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
-#pragma once
-
-/**
- * If not stated otherwise in this file or this component's LICENSE
- * file the following copyright and licenses apply:
- *
- * Copyright 2022 RDK Management
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- **/
-
 #pragma once
 
 #ifndef MODULE_NAME
@@ -47,7 +25,7 @@
 #include <core/core.h>
 #include <privilegedrequest/PrivilegedRequest.h>
 
-#include "IBuffer.h"
+#include <interfaces/ICompositionBuffer.h>
 
 #include <sys/eventfd.h>
 #include <sys/mman.h>
@@ -57,7 +35,7 @@ namespace WPEFramework {
 namespace Compositor {
 
     template <const uint8_t PLANES>
-    class BufferType : public ::Compositor::Interfaces::IBuffer, public Core::IResource {
+    class CompositorBufferType : public Exchange::ICompositionBuffer, public Core::IResource {
     private:
 // We need to test this on a 32 bit platform. On 64 bits platforms we do need
 // the data to be written into the eventfd to be 64 bits otherwise it does not
@@ -96,11 +74,12 @@ namespace Compositor {
             SharedStorage()
             {
             }
-            SharedStorage(const uint32_t width, const uint32_t height, const uint32_t format, const uint64_t modifier)
+            SharedStorage(const uint32_t width, const uint32_t height, const uint32_t format, const uint64_t modifier, const Exchange::ICompositionBuffer::DataType type)
                 : _width(width)
                 , _height(height)
                 , _format(format)
                 , _modifier(modifier)
+                , _type(type)
                 , _dirty()
                 , _copyOfDirty(false)
             {
@@ -162,6 +141,10 @@ namespace Compositor {
                 _dirty.clear();
                 _copyOfDirty = true;
             }
+            Exchange::ICompositionBuffer::DataType Type() const
+            {
+                return _type;
+            }
             uint32_t Lock(uint32_t timeout)
             {
                 timespec structTime;
@@ -192,6 +175,7 @@ namespace Compositor {
             uint32_t _height;
             uint32_t _format;
             uint64_t _modifier;
+            Exchange::ICompositionBuffer::DataType _type;
             PlaneStorage _planes[PLANES];
 #ifdef __WINDOWS__
             CRITICAL_SECTION _mutex;
@@ -202,9 +186,9 @@ namespace Compositor {
             bool _copyOfDirty;
         };
 
-        class Iterator : public ::Compositor::Interfaces::IBuffer::IIterator {
+        class Iterator : public Exchange::ICompositionBuffer::IIterator {
         private:
-            class PlaneImplementation : public ::Compositor::Interfaces::IBuffer::IPlane {
+            class PlaneImplementation : public Exchange::ICompositionBuffer::IPlane {
             public:
                 PlaneImplementation(PlaneImplementation&&) = delete;
                 PlaneImplementation(const PlaneImplementation&) = delete;
@@ -218,7 +202,7 @@ namespace Compositor {
                 ~PlaneImplementation() override = default;
 
             public:
-                void Define(BufferType<PLANES>& parent, const uint8_t index)
+                void Define(CompositorBufferType<PLANES>& parent, const uint8_t index)
                 {
                     _parent = &parent;
                     _index = index;
@@ -242,7 +226,7 @@ namespace Compositor {
                 }
 
             private:
-                BufferType<PLANES>* _parent;
+                CompositorBufferType<PLANES>* _parent;
                 uint8_t _index;
             };
 
@@ -252,7 +236,7 @@ namespace Compositor {
             Iterator(const Iterator&) = delete;
             Iterator& operator=(const Iterator&) = delete;
 
-            Iterator(BufferType<PLANES>& parent)
+            Iterator(CompositorBufferType<PLANES>& parent)
                 : _parent(parent)
             {
                 // Fill our elements
@@ -287,17 +271,17 @@ namespace Compositor {
             }
 
         private:
-            BufferType<PLANES>& _parent;
+            CompositorBufferType<PLANES>& _parent;
             PlaneImplementation _planes[PLANES];
             uint8_t _position;
         };
 
     public:
-        BufferType() = delete;
-        BufferType(const BufferType<PLANES>&) = delete;
-        BufferType<PLANES>& operator=(const BufferType<PLANES>&) = delete;
+        CompositorBufferType() = delete;
+        CompositorBufferType(const CompositorBufferType<PLANES>&) = delete;
+        CompositorBufferType<PLANES>& operator=(const CompositorBufferType<PLANES>&) = delete;
 
-        BufferType(const string& callsign, const uint32_t id, const uint32_t width, const uint32_t height, const uint32_t format, const uint64_t modifier)
+        CompositorBufferType(const string& callsign, const uint32_t id, const uint32_t width, const uint32_t height, const uint32_t format, const uint64_t modifier, const Exchange::ICompositionBuffer::DataType type)
             : _id(id)
             , _planeCount(0)
             , _iterator(*this)
@@ -313,14 +297,14 @@ namespace Compositor {
                 /* Size the file as specified by our struct. */
                 if (::ftruncate(_virtualFd, length) != -1) {
                     /* map that file to a memory area we can directly access as a memory mapped file */
-                    _storage = new (_virtualFd) SharedStorage(width, height, format, modifier);
+                    _storage = new (_virtualFd) SharedStorage(width, height, format, modifier, type);
                     if (_storage != nullptr) {
                         _eventFd = ::eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK | EFD_SEMAPHORE);
                     }
                 }
             }
         }
-        BufferType(const uint32_t id, Core::PrivilegedRequest::Container& descriptors)
+        CompositorBufferType(const uint32_t id, Core::PrivilegedRequest::Container& descriptors)
             : _id(id)
             , _planeCount(0)
             , _iterator(*this)
@@ -355,7 +339,7 @@ namespace Compositor {
                 }
             }
         }
-        ~BufferType() override
+        ~CompositorBufferType() override
         {
             if (_eventFd != -1) {
                 ::close(_eventFd);
@@ -372,7 +356,7 @@ namespace Compositor {
                 _virtualFd = -1;
             }
 
-            // Close all the FileDescriptors handedn over to us for the planes.
+            // Close all the FileDescriptors handed over to us for the planes.
             for (uint8_t index = 0; index < _planeCount; index++) {
                 ::close(_planes[index]);
             }
@@ -424,7 +408,7 @@ namespace Compositor {
         }
 
         //
-        // Implementation of Core::IBuffer
+        // Implementation of Exchange::ICompositionBuffer
         // -----------------------------------------------------------------
         // Wait time in milliseconds.
         IIterator* Planes(const uint32_t waitTimeInMs) override
@@ -470,6 +454,11 @@ namespace Compositor {
         { // Pixel arrangement in the buffer, used to optimize for hardware
             ASSERT(_storage != nullptr);
             return (_storage->Modifier());
+        }
+        Exchange::ICompositionBuffer::DataType Type() const override
+        {
+            ASSERT(_storage != nullptr);
+            return (_storage->Type());
         }
         uint8_t Planes() const
         {

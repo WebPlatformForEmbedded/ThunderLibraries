@@ -29,7 +29,7 @@ target_link_libraries(cb-test PRIVATE
     ${NAMESPACE}Definitions::${NAMESPACE}Definitions
     ${NAMESPACE}Core::${NAMESPACE}Core
     ${NAMESPACE}PrivilegedRequest::${NAMESPACE}PrivilegedRequest
-    ${NAMESPACE}CompositorBuffer::${NAMESPACE}CompositorBuffer)
+    ${NAMESPACE}CompositorBufferType::${NAMESPACE}CompositorBufferType)
 
 if(INSTALL_EXAMPLES)
     install(TARGETS cb-test DESTINATION bin)
