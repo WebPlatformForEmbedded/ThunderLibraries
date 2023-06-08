@@ -19,6 +19,7 @@ find_package(WPEFramework)
 
 find_package(${NAMESPACE}Definitions REQUIRED)
 find_package(${NAMESPACE}Core REQUIRED)
+find_package(${NAMESPACE}PrivilegedRequest REQUIRED)
 find_package(CompileSettingsDebug REQUIRED)
 
 add_executable(cb-test main.cpp)

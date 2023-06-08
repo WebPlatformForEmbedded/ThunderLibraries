@@ -21,8 +21,6 @@ option(BROADCAST
         "Include the broadcasting library." OFF)
 option(COMPOSITOR_BUFFER
         "Include the compositor buffer library." OFF)
-option(PRIVILEDGED_REQUEST
-        "Include the priviledged request library." OFF)
 
 if(BLUETOOTH)
     add_subdirectory(bluetooth)
@@ -34,8 +32,4 @@ endif()
 
 if(COMPOSITOR_BUFFER)
     add_subdirectory(compositorbuffer)
-endif()
-
-if(PRIVILEDGED_REQUEST)
-    add_subdirectory(privilegedrequest)
 endif()
