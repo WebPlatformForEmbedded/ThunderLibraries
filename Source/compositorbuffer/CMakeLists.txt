@@ -15,7 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-project(CompositorBuffer LANGUAGES CXX)
+project(CompositorBufferType LANGUAGES CXX)
 
 cmake_minimum_required(VERSION 3.12)
 
@@ -42,9 +42,7 @@ target_compile_features(${MODULE_NAME} INTERFACE cxx_std_11)
 
 install(TARGETS ${MODULE_NAME} EXPORT ${MODULE_NAME}Targets)
 
-install(FILES 
-            ${CMAKE_CURRENT_SOURCE_DIR}/include/compositorbuffer/IBuffer.h
-            ${CMAKE_CURRENT_SOURCE_DIR}/include/compositorbuffer/BufferType.h 
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/include/compositorbuffer/CompositorBufferType.h 
         DESTINATION include/${NAMESPACE}/compositorbuffer)
 
 include(HeaderOnlyInstall)
