@@ -242,7 +242,12 @@ namespace AVDTP {
         uint16_t _offset;
     }; // class Signal
 
-    class EXTERNAL ClientSocket : public Core::SynchronousChannelType<Core::SocketPort> {
+    class EXTERNAL Socket : public Core::SynchronousChannelType<Core::SocketPort>
+                          , private Core::IOutbound::ICallback
+                          , private Core::WorkerPool::JobType<Socket&> {
+
+        friend class Core::ThreadPool::JobType<Socket&>;
+
     public:
         static constexpr uint32_t CommunicationTimeout = 1000; /* ms */
 
@@ -255,6 +260,49 @@ namespace AVDTP {
         };
 
     public:
+        class EXTERNAL ResponseHandler {
+        public:
+            ResponseHandler(const ResponseHandler&) = default;
+            ResponseHandler& operator=(const ResponseHandler&) = default;
+            ~ResponseHandler() = default;
+
+            ResponseHandler(Socket& channel,
+                            const std::function<void(const Payload::Builder&)>& acceptor,
+                            const std::function<void(const Signal::errorcode, const uint8_t)>& rejector)
+                : _channel(channel)
+                , _acceptor(acceptor)
+                , _rejector(rejector)
+            {
+            }
+
+        public:
+            void operator ()(const Payload::Builder& buildCb = nullptr) const
+            {
+                _acceptor(buildCb);
+            }
+            void operator ()(const Signal::errorcode result = Signal::errorcode::SUCCESS, const uint8_t data = 0) const
+            {
+                if (result == Signal::errorcode::SUCCESS) {
+                    _acceptor(nullptr);
+                }
+                else {
+                    _rejector(result, data);
+                }
+            }
+
+        public:
+            Socket& Channel() const {
+                return (_channel);
+            }
+
+        private:
+            Socket& _channel;
+            std::function<void(const Payload::Builder& buildCb)> _acceptor;
+            std::function<void(const Signal::errorcode, const uint8_t data)> _rejector;
+        }; // class ResponseHandler
+
+    public:
+        template<typename ADMIN>
         class EXTERNAL Command : public Core::IOutbound, public Core::IInbound {
         public:
             class EXTERNAL Request : public Signal {
@@ -335,10 +383,10 @@ namespace AVDTP {
         public:
             Command(const Command&) = delete;
             Command& operator=(const Command&) = delete;
-            Command(ClientSocket& socket)
-                : _request()
+            Command(ADMIN& admin)
+                : _admin(admin)
+                , _request()
                 , _response()
-                , _socket(socket)
             {
             }
             ~Command() = default;
@@ -379,7 +427,10 @@ namespace AVDTP {
             }
             uint16_t Serialize(uint8_t stream[], const uint16_t length) const override
             {
-                const uint16_t result = _request.Serialize(stream, std::min(_socket.OutputMTU(), length));
+                Socket* channel = _admin.Channel();
+                ASSERT(channel != nullptr);
+
+                const uint16_t result = _request.Serialize(stream, std::min(channel->OutputMTU(), length));
 
                 CMD_DUMP("AVTDP client sent", stream, result);
 
@@ -397,31 +448,43 @@ namespace AVDTP {
             }
 
         private:
+            ADMIN& _admin;
             uint32_t _status;
             Request _request;
             Response _response;
-            ClientSocket& _socket;
         }; // class Command
 
     public:
-        ClientSocket(const ClientSocket&) = delete;
-        ClientSocket& operator=(const ClientSocket&) = delete;
+        Socket(const Socket&) = delete;
+        Socket& operator=(const Socket&) = delete;
 
-        ClientSocket(const Core::NodeId& localNode, const Core::NodeId& remoteNode)
+        Socket(const Core::NodeId& localNode, const Core::NodeId& remoteNode)
             : Core::SynchronousChannelType<Core::SocketPort>(SocketPort::SEQUENCED, localNode, remoteNode, 2048, 2048)
+            , Core::IOutbound::ICallback()
+            , Core::WorkerPool::JobType<Socket&>(*this)
             , _adminLock()
+            , _request()
+            , _response(*this)
             , _omtu(0)
             , _type(SIGNALLING)
+            , _sync(true, true)
+            , _busy(false)
         {
         }
-        ClientSocket(const SOCKET& connector, const Core::NodeId& remoteNode)
+        Socket(const SOCKET& connector, const Core::NodeId& remoteNode)
             : Core::SynchronousChannelType<Core::SocketPort>(SocketPort::SEQUENCED, connector, remoteNode, 2048, 2048)
+            , Core::IOutbound::ICallback()
+            , Core::WorkerPool::JobType<Socket&>(*this)
             , _adminLock()
+            , _request()
+            , _response(*this)
             , _omtu(0)
             , _type(SIGNALLING)
+            , _sync(true, true)
+            , _busy(false)
         {
         }
-        ~ClientSocket() = default;
+        ~Socket() = default;
 
     public:
         uint16_t OutputMTU() const {
@@ -430,105 +493,35 @@ namespace AVDTP {
         channeltype Type() const {
             return (_type);
         }
-
-    private:
-        virtual void Operational(const bool upAndRunning) = 0;
-
-        void StateChange() override
-        {
-            Core::SynchronousChannelType<Core::SocketPort>::StateChange();
-
-            if (IsOpen() == true) {
-                struct l2cap_options options{};
-                socklen_t len = sizeof(options);
-
-                ::getsockopt(Handle(), SOL_L2CAP, L2CAP_OPTIONS, &options, &len);
-
-                ASSERT(options.omtu <= SendBufferSize());
-                ASSERT(options.imtu <= ReceiveBufferSize());
-
-                _omtu = options.omtu;
-
-                TRACE(Trace::Information, (_T("AVDTP channel input MTU: %d, output MTU: %d"), options.imtu, options.omtu));
-
-                Operational(true);
-            }
-            else {
-                Operational(false);
-            }
-        }
-        uint16_t Deserialize(const uint8_t stream[] VARIABLE_IS_NOT_USED, const uint16_t length) override
-        {
-            if (length != 0) {
-                // We received data we did not request...
-                TRACE_L1("Unexpected data for deserialization [%d bytes]", length);
-                CMD_DUMP("AVTDP client received unexpected", stream, length);
-            }
-
-            return (0);
+        bool IsBusy() const {
+            return (_busy);
         }
 
-    private:
-        Core::CriticalSection _adminLock;
-        uint16_t _omtu;
+    public:
+        void Type(const channeltype type)
+        {
+            _type = type;
+
+#ifdef __DEBUG__
+            static const char* labels[] = { "signalling", "transport", "reporting", "recovery" };
+            ASSERT(type < RECOVERY);
+            TRACE_L1("AVDTP: Changed channel type to: %s", labels[type]);
+#endif
+        }
+        void Busy(const bool busy)
+        {
+            _busy = busy;
+        }
 
     protected:
-        channeltype _type;
-    }; // class ClientSocket
-
-    class EXTERNAL ServerSocket : public ClientSocket {
-    public:
-        class EXTERNAL ResponseHandler {
-        public:
-            ResponseHandler(const ResponseHandler&) = default;
-            ResponseHandler& operator=(const ResponseHandler&) = default;
-            ~ResponseHandler() = default;
-
-            ResponseHandler(const std::function<void(const Payload::Builder&)>& acceptor,
-                            const std::function<void(const Signal::errorcode, const uint8_t)>& rejector)
-                : _acceptor(acceptor)
-                , _rejector(rejector)
-            {
-            }
-
-        public:
-            void operator ()(const Payload::Builder& buildCb = nullptr) const
-            {
-                _acceptor(buildCb);
-            }
-            void operator ()(const Signal::errorcode result = Signal::errorcode::SUCCESS, const uint8_t data = 0) const
-            {
-                if (result == Signal::errorcode::SUCCESS) {
-                    _acceptor(nullptr);
-                }
-                else {
-                    _rejector(result, data);
-                }
-            }
-
-        private:
-            std::function<void(const Payload::Builder& buildCb)> _acceptor;
-            std::function<void(const Signal::errorcode, const uint8_t data)> _rejector;
-        }; // class ResponseHandler
-
-    public:
-        ServerSocket(const ServerSocket&) = delete;
-        ServerSocket& operator=(const ServerSocket&) = delete;
-
-        ServerSocket(const Core::NodeId& localNode, const Core::NodeId& remoteNode)
-            : ClientSocket(localNode, remoteNode)
-            , _request()
-            , _response(*this)
-
+        virtual void OnSignal(const Signal& request, const ResponseHandler& handler VARIABLE_IS_NOT_USED)
         {
+            TRACE_L1("AVDTP: Unhandled incoming signal %d", request.Id());
         }
-        ServerSocket(const SOCKET& connector, const Core::NodeId& remoteNode)
-            : ClientSocket(connector, remoteNode)
-            , _request()
-            , _response(*this)
+        virtual void OnPacket(const uint8_t stream[] VARIABLE_IS_NOT_USED, const uint16_t length VARIABLE_IS_NOT_USED)
         {
+            TRACE_L1("AVDTP:: Unhandled incoming audio packet (%d bytes)", length);
         }
-        ~ServerSocket() = default;
 
     private:
         class EXTERNAL Request : public Signal {
@@ -542,11 +535,12 @@ namespace AVDTP {
             ~Request() = default;
         };
 
+    private:
         class EXTERNAL Response : public Signal, public Core::IOutbound {
         public:
             Response(const Response&) = delete;
             Response& operator=(const Response&) = delete;
-            Response(ServerSocket& socket)
+            Response(Socket& socket)
                 : Signal()
                 , _socket(socket)
             {
@@ -599,35 +593,52 @@ namespace AVDTP {
             }
 
         private:
-            ServerSocket& _socket;
+            Socket& _socket;
         };
 
-    public:
-        void Type(const channeltype type)
-        {
-            _type = type;
+    private:
+        virtual void Operational(const bool upAndRunning) = 0;
 
-#ifdef __DEBUG__
-            static const char* labels[] = { "signalling", "transport", "reporting", "recovery" };
-            ASSERT(type < RECOVERY);
-            TRACE_L1("AVDTP: Changed channel type to: %s", labels[type]);
-#endif
+        void StateChange() override
+        {
+            Core::SynchronousChannelType<Core::SocketPort>::StateChange();
+
+            if (IsOpen() == true) {
+                struct l2cap_options options{};
+                socklen_t len = sizeof(options);
+
+                ::getsockopt(Handle(), SOL_L2CAP, L2CAP_OPTIONS, &options, &len);
+
+                ASSERT(options.omtu <= SendBufferSize());
+                ASSERT(options.imtu <= ReceiveBufferSize());
+
+                _omtu = options.omtu;
+
+                TRACE(Trace::Information, (_T("AVDTP channel input MTU: %d, output MTU: %d"), options.imtu, options.omtu));
+
+                Operational(true);
+            }
+            else {
+                Operational(false);
+            }
         }
 
-    public:
+    private:
         uint16_t Deserialize(const uint8_t stream[], const uint16_t length) override
         {
-            // This is an AVDTP request from a client.
-            CMD_DUMP("AVDTP server received", stream, length);
-
             uint16_t result = 0;
 
             if (_type == SIGNALLING) {
+               // This is an AVDTP request from a client.
+                CMD_DUMP("AVDTP server received", stream, length);
+
+                _sync.Lock();
+                _sync.ResetEvent();
+
                 result = _request.Deserialize(stream, length);
 
                 if (_request.IsComplete() == true) {
-                    Received(_request, _response);
-                    _request.Clear();
+                    JobType::Submit();
                 }
             }
             else if (_type == TRANSPORT) {
@@ -642,36 +653,47 @@ namespace AVDTP {
         }
 
     private:
-        void Received(const Request& request, Response& response)
+        void Dispatch()
         {
-            if (request.IsValid() == true) {
-                OnSignal(request, ResponseHandler(
+            if (_request.IsValid() == true) {
+                OnSignal(_request, ResponseHandler(*this,
                     [&](const Payload::Builder& buildCb) {
-                        TRACE_L1("AVDTP server: accepting %s", request.AsString().c_str());
-                        response.Accept(request.Label(), request.Id(), buildCb);
+                        TRACE_L1("AVDTP: accepting %s", _request.AsString().c_str());
+                        _response.Accept(_request.Label(), _request.Id(), buildCb);
                     },
                     [&](const Signal::errorcode result, const uint8_t data) {
-                        TRACE_L1("AVDTP server: rejecting %s, reason: %d, data 0x%02x", request.AsString().c_str(), result, data);
-                        response.Reject(request.Label(), request.Id(), result, data);
+                        TRACE_L1("AVDTP: rejecting %s, reason: %d, data 0x%02x", _request.AsString().c_str(), result, data);
+                        _response.Reject(_request.Label(), _request.Id(), result, data);
                     }));
             }
             else {
                 // Totally no clue what this signal is, reply with general reject.
-                TRACE_L1("AVDTP server: unknown signal received [%02x]", request.Id());
-                response.Reject(request.Label(), request.Id());
+                TRACE_L1("AVDTP: unknown signal received [%02x]", _request.Id());
+                _response.Reject(_request.Label(), _request.Id());
             }
 
-            Send(CommunicationTimeout, response, nullptr, nullptr);
+            // Clear for next request.
+            _request.Clear();
+
+            Send(CommunicationTimeout, _response, this, nullptr);
         }
 
-    protected:
-        virtual void OnSignal(const Signal& request, const ResponseHandler& handler) = 0;
-        virtual void OnPacket(const uint8_t stream[], const uint16_t length) = 0;
+    private:
+        // IOutbound::ICallback overrides
+        void Updated(const Core::IOutbound& data VARIABLE_IS_NOT_USED, const uint32_t error_code VARIABLE_IS_NOT_USED) override
+        {
+            _sync.SetEvent();
+        }
 
     private:
+        Core::CriticalSection _adminLock;
         Request _request;
         Response _response;
-    }; // class ServerSocket
+        uint16_t _omtu;
+        channeltype _type;
+        Core::Event _sync;
+        std::atomic<bool> _busy;
+    }; // class Socket
 
 } // namespace AVDTP
 

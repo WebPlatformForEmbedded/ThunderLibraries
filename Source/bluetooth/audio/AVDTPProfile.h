@@ -28,7 +28,10 @@ namespace Bluetooth {
 
 namespace AVDTP {
 
-    class EXTERNAL StreamEndPoint {
+    class Server;
+    class Client;
+
+    class EXTERNAL StreamEndPointData {
     public:
         class EXTERNAL Service {
         public:
@@ -119,18 +122,21 @@ namespace AVDTP {
             IDLE,
             CONFIGURED,
             OPENED,
-            STARTED
+            STARTED,
+            CLOSING,
+            ABORTING
         };
 
     public:
-        StreamEndPoint() = delete;
-        StreamEndPoint(const StreamEndPoint&) = delete;
-        StreamEndPoint& operator=(const StreamEndPoint&) = delete;
-        virtual ~StreamEndPoint() = default;
+        StreamEndPointData() = delete;
+        StreamEndPointData(const StreamEndPointData&) = delete;
+        StreamEndPointData& operator=(const StreamEndPointData&) = delete;
+        virtual ~StreamEndPointData() = default;
 
-        StreamEndPoint(const uint8_t id, const septype service, const mediatype media,
-                       const std::function<void(StreamEndPoint&)>& fillerCb = nullptr)
+        StreamEndPointData(const uint8_t id, const septype service, const mediatype media,
+                       const std::function<void(StreamEndPointData&)>& fillerCb = nullptr)
             : _id(id)
+            , _remoteId(0)
             , _state(IDLE)
             , _type(service)
             , _mediaType(media)
@@ -143,8 +149,9 @@ namespace AVDTP {
                 fillerCb(*this);
             }
         }
-        StreamEndPoint(StreamEndPoint&& other)
+        StreamEndPointData(StreamEndPointData&& other)
             : _id(other._id)
+            , _remoteId(other._remoteId)
             , _state(other._state)
             , _type(other._type)
             , _mediaType(other._mediaType)
@@ -152,8 +159,9 @@ namespace AVDTP {
             , _configuration(std::move(other._configuration))
         {
         }
-        StreamEndPoint(const uint8_t data[2])
+        StreamEndPointData(const uint8_t data[2])
             : _id(0)
+            , _remoteId(0)
             , _state(IDLE)
             , _type()
             , _mediaType()
@@ -169,6 +177,9 @@ namespace AVDTP {
     public:
         uint32_t Id() const {
             return (_id);
+        }
+        uint32_t RemoteId() const {
+            return (_remoteId);
         }
         septype Type() const {
             return (_type);
@@ -193,54 +204,6 @@ namespace AVDTP {
         }
         ServiceMap& Configuration() {
             return (_configuration);
-        }
-
-    public:
-        virtual uint32_t Configure(const uint8_t /* intSeid */, uint8_t& /* failedCategory */)
-        {
-            return (Core::ERROR_UNAVAILABLE);
-        }
-        virtual uint32_t Reconfigure(uint8_t& /* failedCategory */)
-        {
-            return (Core::ERROR_UNAVAILABLE);
-        }
-        virtual uint32_t GetCapabilities() const
-        {
-            return (Core::ERROR_UNAVAILABLE);
-        }
-        virtual uint32_t GetConfiguration() const
-        {
-            return (Core::ERROR_UNAVAILABLE); 
-        }
-        virtual uint32_t Start()
-        {
-            return (Core::ERROR_UNAVAILABLE);
-        }
-        virtual uint32_t Suspend()
-        {
-            return (Core::ERROR_UNAVAILABLE);
-        }
-        virtual uint32_t Open()
-        {
-            return (Core::ERROR_UNAVAILABLE);
-        }
-        virtual uint32_t Close()
-        {
-            return (Core::ERROR_UNAVAILABLE);
-        }
-        virtual uint32_t Abort()
-        {
-            return (Core::ERROR_UNAVAILABLE);
-        }
-
-    public:
-        statetype State(const statetype newState)
-        {
-            const statetype old = _state;
-
-            _state = newState;
-
-            return (old);
         }
 
     public:
@@ -274,6 +237,10 @@ namespace AVDTP {
                             std::forward_as_tuple(category),
                             std::forward_as_tuple(category, std::forward<T>(buffer)));
         }
+        void RemoteId(const uint8_t id)
+        {
+            _remoteId = id;
+        }
 
     public:
         void Serialize(Payload& payload) const
@@ -305,6 +272,16 @@ namespace AVDTP {
         }
 #endif // __DEBUG__
 
+    protected:
+        statetype State(const statetype newState)
+        {
+            const statetype old = _state;
+
+            _state = newState;
+
+            return (old);
+        }
+
     private:
         void Deserialize(const uint8_t data[2])
         {
@@ -318,114 +295,130 @@ namespace AVDTP {
 
     private:
         uint8_t _id;
+        uint8_t _remoteId;
         statetype _state;
         septype _type;
         mediatype _mediaType;
         ServiceMap _capabilities;
         ServiceMap _configuration;
-    }; // class StreamEndPoint
+    }; // class StreamEndPointData
+
+    struct EXTERNAL IStreamEndPointControl {
+        virtual ~IStreamEndPointControl() { }
+
+        virtual uint32_t OnSetConfiguration(uint8_t& outFailedCategory, Socket* channel) = 0;
+        virtual uint32_t OnReconfigure(uint8_t& outFailedCategory) = 0;
+        virtual uint32_t OnStart() = 0;
+        virtual uint32_t OnSuspend() = 0;
+        virtual uint32_t OnOpen() = 0;
+        virtual uint32_t OnClose() = 0;
+        virtual uint32_t OnAbort() = 0;
+        virtual uint32_t OnSecurityControl() = 0;
+    };
+
+    class EXTERNAL StreamEndPoint : public StreamEndPointData,
+                           public IStreamEndPointControl {
+    public:
+        StreamEndPoint() = delete;
+        StreamEndPoint(const StreamEndPoint&) = delete;
+        StreamEndPoint& operator=(const StreamEndPoint&) = delete;
+        ~StreamEndPoint() override = default;
+
+        StreamEndPoint(const uint8_t id, const septype service, const mediatype media,
+                       const std::function<void(StreamEndPointData&)>& fillerCb = nullptr)
+            : StreamEndPointData(id, service, media, fillerCb)
+        {
+        }
+    };
 
     class EXTERNAL Client {
     public:
-        Client() = delete;
         Client(const Client&) = delete;
         Client& operator=(const Client&) = delete;
         ~Client() = default;
 
-        Client(ClientSocket& socket)
+        explicit Client(Socket* socket)
             : _socket(socket)
-            , _command(socket)
+            , _command(*this)
         {
         }
 
     public:
-        uint32_t Discover(const std::function<void(StreamEndPoint&&)>& reportCb) const;
-
-        uint32_t SetConfiguration(const uint8_t id, const uint8_t intId, const StreamEndPoint::ServiceMap& config);
-
-        uint32_t GetConfiguration(const uint8_t id, const std::function<void(const uint8_t, Buffer&&)>& reportCb) const;
-
-        uint32_t Start(const uint8_t id)
-        {
-            ASSERT(id != 0);
-
-            _command.Set(Signal::AVDTP_START, id);
-
-            return (Execute(_command));
+        Socket* Channel() {
+            return (_socket);
         }
-        uint32_t Suspend(const uint8_t id)
-        {
-            ASSERT(id != 0);
-
-            _command.Set(Signal::AVDTP_SUSPEND, id);
-
-            return (Execute(_command));
-        }
-        uint32_t Open(const uint8_t id)
-        {
-            ASSERT(id != 0);
-
-            _command.Set(Signal::AVDTP_OPEN, id);
-
-            return (Execute(_command));
-        }
-        uint32_t Close(const uint8_t id)
-        {
-            ASSERT(id != 0);
-
-            _command.Set(Signal::AVDTP_CLOSE, id);
-
-            return (Execute(_command));
-        }
-        uint32_t Abort(const uint8_t id)
-        {
-            _command.Set(Signal::AVDTP_ABORT, id);
-
-            return (Execute(_command));
+        const Socket* Channel() const {
+            return (_socket);
         }
 
     public:
-        uint32_t SetConfiguration(StreamEndPoint& ep, const uint8_t intId)
+        void Channel(Socket* socket)
         {
-            return (SetConfiguration(ep.Id(), intId, ep.Configuration()));
+            _socket = socket;
         }
-        uint32_t GetConfiguration(StreamEndPoint& ep) const
+
+    public:
+        uint32_t Discover(const std::function<void(StreamEndPointData&&)>& reportCb) const;
+
+        uint32_t SetConfiguration(StreamEndPoint& ep, const uint8_t remoteId);
+
+        uint32_t GetConfiguration(const uint8_t remoteId, const std::function<void(const uint8_t, Buffer&&)>& reportCb) const;
+
+        uint32_t Start(StreamEndPoint& ep)
         {
-            return (GetConfiguration(ep.Id(), [&](const uint8_t category, const Buffer& data) {
-                ep.Add(static_cast<StreamEndPoint::Service::categorytype>(category), data);
-            }));
+            ASSERT(ep.RemoteId() != 0);
+
+            _command.Set(Signal::AVDTP_START, ep.RemoteId());
+
+            return (Execute(_command));
         }
-        uint32_t Start(const StreamEndPoint& ep)
+        uint32_t Suspend(StreamEndPoint& ep)
         {
-            return (Start(ep.Id()));
+            ASSERT(ep.RemoteId() != 0);
+
+            _command.Set(Signal::AVDTP_SUSPEND, ep.RemoteId());
+
+            return (Execute(_command));
         }
-        uint32_t Suspend(const StreamEndPoint& ep)
+        uint32_t Open(StreamEndPoint& ep)
         {
-            return (Suspend(ep.Id()));
+            ASSERT(ep.RemoteId() != 0);
+
+            _command.Set(Signal::AVDTP_OPEN, ep.RemoteId());
+
+            return (Execute(_command));
         }
-        uint32_t Open(const StreamEndPoint& ep)
+        uint32_t Close(StreamEndPoint& ep)
         {
-            return (Open(ep.Id()));
+            ASSERT(ep.RemoteId() != 0);
+
+            _command.Set(Signal::AVDTP_CLOSE, ep.RemoteId());
+
+            const uint32_t result = Execute(_command);
+
+            return (result);
         }
-        uint32_t Close(const StreamEndPoint& ep)
+        uint32_t Abort(StreamEndPoint& ep)
         {
-            return (Close(ep.Id()));
-        }
-        uint32_t Abort(const StreamEndPoint& ep)
-        {
-            return (Abort(ep.Id()));
+            ASSERT(ep.RemoteId() != 0);
+
+            _command.Set(Signal::AVDTP_ABORT, ep.RemoteId());
+
+            const uint32_t result = Execute(_command);
+
+            return (result);
         }
 
     private:
-        uint32_t Execute(ClientSocket::Command& cmd, const Payload::Inspector& inspectorCb = nullptr) const;
+        uint32_t Execute(Socket::Command<Client>& cmd, const Payload::Inspector& inspectorCb = nullptr) const;
 
     private:
-        ClientSocket& _socket;
-        mutable AVDTP::ClientSocket::Command _command;
+        Socket* _socket;
+        mutable AVDTP::Socket::Command<Client> _command;
     }; // class Client
 
-    class Server {
-        using Handler = ServerSocket::ResponseHandler;
+    class EXTERNAL Server {
+        using Handler = Socket::ResponseHandler;
 
     public:
         Server() = default;

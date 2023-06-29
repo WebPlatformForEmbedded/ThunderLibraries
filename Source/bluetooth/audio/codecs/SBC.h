@@ -275,8 +275,8 @@ namespace A2DP {
             , _bitRate(0)
             , _sampleRate(0)
             , _channels(0)
-            , _inFrameSize(0)
-            , _outFrameSize(0)
+            , _rawFrameSize(0)
+            , _encodedFrameSize(0)
             , _frameDuration(0)
         {
             SBCInitialize();
@@ -292,8 +292,8 @@ namespace A2DP {
             , _bitRate(0)
             , _sampleRate(0)
             , _channels(0)
-            , _inFrameSize(0)
-            , _outFrameSize(0)
+            , _rawFrameSize(0)
+            , _encodedFrameSize(0)
             , _frameDuration(0)
         {
             SBCInitialize();
@@ -310,11 +310,11 @@ namespace A2DP {
         uint32_t BitRate() const override {
             return (_bitRate);
         }
-        uint16_t InFrameSize() const override {
-            return (_inFrameSize);
+        uint16_t RawFrameSize() const override {
+            return (_rawFrameSize);
         }
-        uint16_t OutFrameSize() const override {
-            return (_outFrameSize);
+        uint16_t EncodedFrameSize() const override {
+            return (_encodedFrameSize);
         }
 
         uint32_t Configure(const uint8_t stream[], const uint16_t length) override;
@@ -357,8 +357,8 @@ namespace A2DP {
         uint32_t _bitRate;
         uint32_t _sampleRate;
         uint8_t _channels;
-        uint16_t _inFrameSize;
-        uint16_t _outFrameSize;
+        uint16_t _rawFrameSize;
+        uint16_t _encodedFrameSize;
         uint32_t _frameDuration;
 
     private:

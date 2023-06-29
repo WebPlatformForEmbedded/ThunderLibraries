@@ -29,10 +29,10 @@ namespace AVDTP {
     // Client methods
     // --------------------------------
 
-    uint32_t Client::Discover(const std::function<void(StreamEndPoint&&)>& reportCb) const
+    uint32_t Client::Discover(const std::function<void(StreamEndPointData&&)>& reportCb) const
     {
         uint32_t result;
-        std::list<StreamEndPoint> endpoints;
+        std::list<StreamEndPointData> endpoints;
 
         _command.Set(Signal::AVDTP_DISCOVER);
 
@@ -87,16 +87,11 @@ namespace AVDTP {
         return (result);
     }
 
-    uint32_t Client::SetConfiguration(const uint8_t id, const uint8_t intId, const StreamEndPoint::ServiceMap& config)
+    uint32_t Client::SetConfiguration(StreamEndPoint& ep, const uint8_t remoteId)
     {
-        uint32_t result;
-
-        ASSERT(config.empty() == false);
-        ASSERT(intId != 0);
-
         auto cb = [&](Payload& payload) {
             // For each category set the configuration data...
-            for (auto const& entry : config) {
+            for (auto const& entry : ep.Configuration()) {
                 const StreamEndPoint::Service& service = entry.second;
 
                 ASSERT(service.Params().size() <= 255);
@@ -111,19 +106,19 @@ namespace AVDTP {
             }
         };
 
-        _command.Set(Signal::AVDTP_SET_CONFIGURATION, id, intId, cb);
+        ASSERT(remoteId != 0);
+        ASSERT(ep.Id() != 0);
 
-        result = Execute(_command);
-
-        return (result);
+        _command.Set(Signal::AVDTP_SET_CONFIGURATION, remoteId, ep.Id(), cb);
+        return (Execute(_command));
     }
 
-    uint32_t Client::GetConfiguration(const uint8_t id, const std::function<void(const uint8_t, Buffer&&)>& reportCb) const
+    uint32_t Client::GetConfiguration(const uint8_t remoteId, const std::function<void(const uint8_t, Buffer&&)>& reportCb) const
     {
-        ASSERT(id != 0);
         ASSERT(reportCb != nullptr);
+        ASSERT(remoteId != 0);
 
-        _command.Set(Signal::AVDTP_GET_CONFIGURATION, id);
+        _command.Set(Signal::AVDTP_GET_CONFIGURATION, remoteId);
 
         return (Execute(_command, [&](const Payload& payload) {
 
@@ -148,11 +143,13 @@ namespace AVDTP {
     }
 
     /* private */
-    uint32_t Client::Execute(AVDTP::ClientSocket::Command& cmd, const Payload::Inspector& inspectorCb) const
+    uint32_t Client::Execute(AVDTP::Socket::Command<Client>& cmd, const Payload::Inspector& inspectorCb) const
     {
         uint32_t result = Core::ERROR_ASYNC_FAILED;
 
-        if (_socket.Exchange(AVDTP::ClientSocket::CommunicationTimeout, cmd, cmd) == Core::ERROR_NONE) {
+        ASSERT(_socket != nullptr);
+
+        if (_socket->Exchange(AVDTP::Socket::CommunicationTimeout, cmd, cmd) == Core::ERROR_NONE) {
 
             if (cmd.IsAccepted() == false) {
                 TRACE_L1("Signal %d was rejected! [%d]", cmd.Call().Id() ,cmd.Result().Error());
@@ -186,7 +183,7 @@ namespace AVDTP {
             }) == true);
 
             // Must be at least on endpoint configured.
-            ASSERT(id > 1);
+           // ASSERT(id > 1);
         });
     }
 
@@ -290,7 +287,11 @@ namespace AVDTP {
                 });
 
                 if (code == Signal::errorcode::SUCCESS) {
-                    code = ToSignalCode(ep.Configure(intSeid, failedCategory));
+                    code = ToSignalCode(ep.OnSetConfiguration(failedCategory, &Reply.Channel()));
+
+                    if (code == Signal::errorcode::SUCCESS) {
+                        ep.RemoteId(intSeid);
+                    }
                 }
             });
         }
@@ -341,7 +342,7 @@ namespace AVDTP {
                 });
 
                 if (code == Signal::errorcode::SUCCESS) {
-                    code = ToSignalCode(ep.Reconfigure(failedCategory));
+                    code = ToSignalCode(ep.OnReconfigure(failedCategory));
                 }
             });
         }
@@ -354,10 +355,10 @@ namespace AVDTP {
         // Requests the endpoint state change from CONFIGURED to OPENED.
         // Once opened the initiator can establish a transport connection.
 
-        Signal::errorcode code = Signal::errorcode::SUCCESS;
+        Signal::errorcode code = Signal::errorcode::BAD_ACP_SEID;
 
         WithEndpoint(seid, [&](StreamEndPoint& ep) {
-            code = ToSignalCode(ep.Open());
+            code = ToSignalCode(ep.OnOpen());
         });
 
         Reply(code);
@@ -367,10 +368,10 @@ namespace AVDTP {
     {
         // Requests the endpoint state change to OPENED to CONFIGURED.
 
-        Signal::errorcode code = Signal::errorcode::SUCCESS;
+        Signal::errorcode code = Signal::errorcode::BAD_ACP_SEID;
 
         WithEndpoint(seid, [&](StreamEndPoint& ep) {
-            code = ToSignalCode(ep.Close());
+            code = ToSignalCode(ep.OnClose());
         });
 
         Reply(code);
@@ -380,10 +381,10 @@ namespace AVDTP {
     {
         // Requests the endpoint state change from OPENED to STARTED.
 
-        Signal::errorcode code = Signal::errorcode::SUCCESS;
+        Signal::errorcode code = Signal::errorcode::BAD_ACP_SEID;
 
         WithEndpoint(seid, [&](StreamEndPoint& ep) {
-            code = ToSignalCode(ep.Start());
+            code = ToSignalCode(ep.OnStart());
         });
 
         Reply(code, seid);
@@ -393,10 +394,10 @@ namespace AVDTP {
     {
         // Requests the endpoint state change form STARTED to OPENED.
 
-        Signal::errorcode code = Signal::errorcode::SUCCESS;
+        Signal::errorcode code = Signal::errorcode::BAD_ACP_SEID;
 
         WithEndpoint(seid, [&](StreamEndPoint& ep) {
-            code = ToSignalCode(ep.Suspend());
+            code = ToSignalCode(ep.OnSuspend());
         });
 
         Reply(code, seid);
@@ -406,10 +407,10 @@ namespace AVDTP {
     {
         // Requests the endpoint state change to IDLE.
 
-        Signal::errorcode code = Signal::errorcode::SUCCESS;
+        Signal::errorcode code = Signal::errorcode::BAD_ACP_SEID;
 
         WithEndpoint(seid, [&](StreamEndPoint& ep) {
-            code = ToSignalCode(ep.Abort());
+            code = ToSignalCode(ep.OnAbort());
         });
 
         Reply(code);

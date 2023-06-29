@@ -303,8 +303,8 @@ namespace A2DP {
     /* virtual */ uint16_t SBC::Encode(const uint16_t inBufferSize, const uint8_t inBuffer[],
                                        uint16_t& outSize, uint8_t outBuffer[]) const
     {
-        ASSERT(_inFrameSize != 0);
-        ASSERT(_outFrameSize != 0);
+        ASSERT(_rawFrameSize != 0);
+        ASSERT(_encodedFrameSize != 0);
 
         ASSERT(inBuffer != nullptr);
         ASSERT(outBuffer != nullptr);
@@ -315,11 +315,11 @@ namespace A2DP {
 
         _lock.Lock();
 
-        if ((_inFrameSize != 0) && (_outFrameSize != 0)) {
+        if ((_rawFrameSize != 0) && (_encodedFrameSize != 0)) {
 
             const uint8_t MAX_FRAMES = 15; // only a four bit number holds the number of frames in a packet
 
-            uint16_t frames = (inBufferSize / _inFrameSize);
+            uint16_t frames = (inBufferSize / _rawFrameSize);
             uint16_t available = (outSize - produced);
 
             ASSERT(outSize >= sizeof(SBCHeader));
@@ -329,12 +329,12 @@ namespace A2DP {
             }
 
             while ((frames-- > 0)
-                    && (inBufferSize >= (consumed + _inFrameSize))
-                    && (available >= _outFrameSize)) {
+                    && (inBufferSize >= (consumed + _rawFrameSize))
+                    && (available >= _encodedFrameSize)) {
 
                 ssize_t written = 0;
                 ssize_t read = ::sbc_encode(static_cast<::sbc_t*>(_sbcHandle),
-                                            (inBuffer + consumed), _inFrameSize,
+                                            (inBuffer + consumed), _rawFrameSize,
                                             (outBuffer + produced), available,
                                             &written);
 
@@ -368,41 +368,51 @@ namespace A2DP {
     /* virtual */ uint16_t SBC::Decode(const uint16_t inBufferSize, const uint8_t inBuffer[],
                                        uint16_t& outSize, uint8_t outBuffer[]) const
     {
-        ASSERT(_inFrameSize != 0);
-        ASSERT(_outFrameSize != 0);
+        ASSERT(_rawFrameSize != 0);
+        ASSERT(_encodedFrameSize != 0);
 
         ASSERT(inBuffer != nullptr);
         ASSERT(outBuffer != nullptr);
 
-        const SBCHeader* header = reinterpret_cast<const SBCHeader*>(inBuffer);
-
-        uint8_t frames =  header->frameCount;
-        uint8_t count = 0;
-
-        uint16_t consumed = sizeof(SBCHeader);
+        uint16_t consumed = 0;
         uint16_t produced = 0;
         uint16_t available = outSize;
 
         _lock.Lock();
 
-        while (frames--) {
-            size_t written = 0;
-            ssize_t read = ::sbc_decode(static_cast<::sbc_t*>(_sbcHandle),
-                                        (inBuffer + consumed), _outFrameSize,
-                                        (outBuffer + produced), available,
-                                        &written);
+        if ((_rawFrameSize != 0) && (_encodedFrameSize != 0)) {
+
+            ASSERT(outSize >= sizeof(SBCHeader));
+            const SBCHeader* header = reinterpret_cast<const SBCHeader*>(inBuffer);
+
+            uint8_t frames =  header->frameCount;
+            consumed = sizeof(SBCHeader);
+
+            while ((frames != 0)
+                    && (inBufferSize >= (consumed + _encodedFrameSize))
+                    && (available >= _rawFrameSize)) {
+
+                size_t written = 0;
+                ssize_t read = ::sbc_decode(static_cast<::sbc_t*>(_sbcHandle),
+                                            (inBuffer + consumed), _encodedFrameSize,
+                                            (outBuffer + produced), available,
+                                            &written);
 
 
-            if (read < 0) {
-                TRACE_L1("Failed to decode an SBC frame!");
-                break;
+                if (read < 0) {
+                    TRACE_L1("Failed to decode an SBC frame!");
+                    break;
+                }
+                else {
+                    available -= written;
+                    produced += written;
+                    consumed += read;
+                }
+
+                frames--;
             }
-            else {
-                available -= written;
-                produced += written;
-                consumed += read;
-                count++;
-            }
+
+            ASSERT(frames == 0);
         }
 
         _lock.Unlock();
@@ -589,10 +599,10 @@ namespace A2DP {
         }
 
         _frameDuration = ::sbc_get_frame_duration(sbc); /* microseconds */
-        _inFrameSize = ::sbc_get_codesize(sbc); /* bytes */
-        _outFrameSize = ::sbc_get_frame_length(sbc); /* bytes */
+        _rawFrameSize = ::sbc_get_codesize(sbc); /* bytes */
+        _encodedFrameSize = ::sbc_get_frame_length(sbc); /* bytes */
 
-        _bitRate = ((8L * _outFrameSize * rate) / (bands * blocks)); /* bits per second */
+        _bitRate = ((8L * _encodedFrameSize * rate) / (bands * blocks)); /* bits per second */
         _channels = (sbc->mode == SBC_MODE_MONO? 1 : 2);
         _sampleRate = rate;
 
@@ -631,7 +641,7 @@ namespace A2DP {
         TRACE(Trace::Information, (_T("Quality preset: %s"), (preset.IsSet() == true? preset.Data() : "(custom)")));
         TRACE(Trace::Information, (_T("Bitpool value: %d"), _bitpool));
         TRACE(Trace::Information, (_T("Bitrate: %d bps"), _bitRate));
-        TRACE(Trace::Information, (_T("Frame size: in %d bytes, out %d bytes (%d us)"), _inFrameSize, _outFrameSize, _frameDuration));
+        TRACE(Trace::Information, (_T("Frame size: raw %d bytes, encoded %d bytes (%d us)"), _rawFrameSize, _encodedFrameSize, _frameDuration));
     }
 #endif // __DEBUG__
 

@@ -32,7 +32,7 @@ namespace A2DP {
         static constexpr uint8_t MEDIA_TYPE = 0x00; // audio
 
         enum codectype : uint8_t {
-            LC_SBC
+            LC_SBC = 0
         };
 
         struct StreamFormat {
@@ -48,8 +48,8 @@ namespace A2DP {
 
         virtual uint32_t BitRate() const = 0; // bits per second
 
-        virtual uint16_t InFrameSize() const = 0;
-        virtual uint16_t OutFrameSize() const = 0;
+        virtual uint16_t RawFrameSize() const = 0;
+        virtual uint16_t EncodedFrameSize() const = 0;
 
         virtual uint32_t QOS(const int8_t policy) = 0;
 
