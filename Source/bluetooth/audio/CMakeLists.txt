@@ -1,7 +1,7 @@
 # If not stated otherwise in this file or this component's license file the
 # following copyright and licenses apply:
 #
-# Copyright 2020 Metrological
+# Copyright 2023 Metrological
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,55 +22,45 @@ find_package(${NAMESPACE}Core REQUIRED)
 find_package(${NAMESPACE}Messaging REQUIRED)
 find_package(CompileSettingsDebug CONFIG REQUIRED)
 
-project(${NAMESPACE}Bluetooth)
+project(${NAMESPACE}BluetoothAudio)
 project_version(1.0.0)
 set(TARGET ${PROJECT_NAME})
 message("Setup ${TARGET} v${PROJECT_VERSION}")
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
 
-option(BCM43XX "Select the serial driver for bluetooth modules found on RaspberryPi's" OFF)
-option(GATT_SUPPORT "Include GATT support" ON)
-option(AUDIO_SUPPORT "Include audio sink/source support" ON)
+find_package(SBC REQUIRED)
 
-find_package(Bluez5UtilHeaders REQUIRED)
-find_package(BCM_HOST QUIET)
-find_package(NEXUS QUIET)
-
-if(BCM_HOST_FOUND)
-   set(BCM43XX ON)
-endif()
-
-add_library(${TARGET} SHARED
-    HCISocket.cpp
-    UUID.cpp
-    Definitions.cpp
-    BluetoothUtils.cpp
-    Module.cpp
-)
+file(GLOB CODEC_HEADERS codecs/*.h)
 
 set(PUBLIC_HEADERS
-    IDriver.h
-    HCISocket.h
-    UUID.h
-    Debug.h
-    BluetoothUtils.h
+    IAudioCodec.h
+    IAudioContentProtection.h
+    SDPSocket.h
+    SDPProfile.h
+    AVDTPSocket.h
+    AVDTPProfile.h
+    RTPSocket.h
+    DataRecord.h
     Module.h
-    bluetooth.h
+    bluetooth_audio.h
 )
 
-if(BCM43XX)
-    target_sources(${TARGET} PRIVATE drivers/BCM43XX.cpp)
-else()
-    target_sources(${TARGET} PRIVATE drivers/Basic.cpp)
-endif()
+add_library(${TARGET} SHARED
+    SDPSocket.cpp
+    SDPProfile.cpp
+    AVDTPSocket.cpp
+    AVDTPProfile.cpp
+    codecs/SBC.cpp
+    Module.cpp
+)
 
 target_link_libraries(${TARGET}
     PRIVATE
         CompileSettingsDebug::CompileSettingsDebug
         ${NAMESPACE}Core::${NAMESPACE}Core
         ${NAMESPACE}Messaging::${NAMESPACE}Messaging
-        Bluez5UtilHeaders::Bluez5UtilHeaders
+        ${SBC_LIBRARIES}
 )
 
 set_target_properties(${TARGET}
@@ -116,23 +106,20 @@ install(
     LIBRARY DESTINATION lib COMPONENT libs      # shared lib
     RUNTIME DESTINATION bin COMPONENT libs      # binaries
     FRAMEWORK DESTINATION bin COMPONENT libs    # for mac
-    PUBLIC_HEADER DESTINATION include/${NAMESPACE}/bluetooth COMPONENT devel   # headers for mac (note the different component -> different package)
+    PUBLIC_HEADER DESTINATION include/${NAMESPACE}/bluetooth/audio COMPONENT devel
     INCLUDES DESTINATION include/${NAMESPACE}   # default include path
+)
+
+install(
+    FILES ${CODEC_HEADERS}
+    DESTINATION include/${NAMESPACE}/bluetooth/audio/codecs
 )
 
 InstallPackageConfig(
     TARGETS ${TARGET}
-    DESCRIPTION "Bluetooth library"
+    DESCRIPTION "Bluetooth audio library"
 )
 
 InstallCMakeConfig(
     TARGETS ${TARGET}
 )
-
-if(GATT_SUPPORT)
-    add_subdirectory(gatt)
-endif()
-
-if(AUDIO_SUPPORT)
-    add_subdirectory(audio)
-endif()

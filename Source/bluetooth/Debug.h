@@ -19,21 +19,11 @@
 
 #pragma once
 
-#ifndef MODULE_NAME
-#define MODULE_NAME Bluetooth 
-#endif
+#define BLUETOOTH_CMD_DUMP
 
-#include <core/core.h>
-#include <messaging/messaging.h>
-
-#include <../include/bluetooth/bluetooth.h>
-#include <../include/bluetooth/hci.h>
-#include <../include/bluetooth/mgmt.h>
-#include <../include/bluetooth/l2cap.h>
-
-#include "Debug.h"
-
-#if defined(__WINDOWS__) && defined(BLUETOOTH_EXPORTS)
-#undef EXTERNAL
-#define EXTERNAL EXTERNAL_EXPORT
+#if defined(BLUETOOTH_CMD_DUMP)
+#define CMD_DUMP(descr, buffer, length) \
+    do { fprintf(stderr, "%s [%i]: ", descr, length); for (int i = 0; i < length; i++) { printf("%02x:", buffer[i]); } printf("\n"); } while(0)
+#else
+#define CMD_DUMP(descr, buffer, length)
 #endif

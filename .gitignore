@@ -3,7 +3,8 @@ CMakeFiles
 .cproject
 .project
 .idea/
-.vscode
+*.vscode
+*.code-workspace
 build/
 output/
 cmake-build-*/

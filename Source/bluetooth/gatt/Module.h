@@ -20,18 +20,16 @@
 #pragma once
 
 #ifndef MODULE_NAME
-#define MODULE_NAME Bluetooth 
+#define MODULE_NAME Bluetooth_GATT
 #endif
 
 #include <core/core.h>
 #include <messaging/messaging.h>
 
 #include <../include/bluetooth/bluetooth.h>
-#include <../include/bluetooth/hci.h>
-#include <../include/bluetooth/mgmt.h>
-#include <../include/bluetooth/l2cap.h>
 
-#include "Debug.h"
+#include "../Debug.h"
+#include "../UUID.h"
 
 #if defined(__WINDOWS__) && defined(BLUETOOTH_EXPORTS)
 #undef EXTERNAL

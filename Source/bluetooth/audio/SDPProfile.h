@@ -20,8 +20,6 @@
 #pragma once
 
 #include "Module.h"
-#include "UUID.h"
-
 #include "SDPSocket.h"
 
 #include <set>
@@ -910,22 +908,18 @@ namespace SDP {
         }
         string Name() const
         {
-            string name;
+            string name{};
 
             if (LanguageBaseAttributeIDList() != nullptr) {
                 uint16_t lb = LanguageBaseAttributeIDList()->LanguageBase("en", CHARSET_US_ASCII);
+                if (lb == 0) {
+                    lb = LanguageBaseAttributeIDList()->LanguageBase("en", CHARSET_UTF8);
+                }
+
                 if (lb != 0) {
                     const Buffer* buffer = Attribute(lb + AttributeDescriptor::ServiceNameOffset);
                     if (buffer != nullptr) {
                         name = Data::Element<std::string>(*buffer).Value();
-                    }
-                } else {
-                    lb = LanguageBaseAttributeIDList()->LanguageBase("en", CHARSET_UTF8);
-                    if (lb != 0) {
-                        const Buffer* buffer = Attribute(lb + AttributeDescriptor::ServiceNameOffset);
-                        if (buffer != nullptr) {
-                            name = Data::Element<std::string>(*buffer).Value();
-                        }
                     }
                 }
             }
@@ -1140,24 +1134,16 @@ namespace SDP {
 
     class EXTERNAL Tree {
     public:
-        Tree()
-            : _lock()
-            , _services()
-        {
-        }
         Tree(const Tree&) = delete;
         Tree& operator=(const Tree&) = delete;
         ~Tree() = default;
 
+        Tree()
+            : _services()
+        {
+        }
+
     public:
-        void Lock() const
-        {
-            _lock.Lock();
-        }
-        void Unlock() const
-        {
-            _lock.Unlock();
-        }
         const std::list<Service>& Services() const
         {
             return (_services);
@@ -1169,144 +1155,121 @@ namespace SDP {
         }
         Service& Add(const uint32_t handle = 0)
         {
-            _lock.Lock();
             _services.emplace_back(handle == 0? (0x10000 + _services.size()) : handle);
             Service& added = _services.back();
-            _lock.Unlock();
             return (added);
         }
 
     protected:
-        mutable Core::CriticalSection _lock;
         std::list<Service> _services;
     }; // class Tree
 
-    class EXTERNAL Profile : public Tree {
+    class EXTERNAL Client {
     public:
-        typedef std::function<void(const uint32_t)> Handler;
+        Client() = delete;
+        Client(const Client&) = delete;
+        Client& operator=(const Client&) = delete;
+        ~Client() = default;
 
-    public:
-        Profile()
-            : _socket(nullptr)
-            , _command()
-            , _handler(nullptr)
-            , _servicesIterator(_services.end())
-            , _expired(0)
+        Client(ClientSocket& socket)
+            : _socket(socket)
         {
         }
-        Profile(const Profile&) = delete;
-        Profile& operator=(const Profile&) = delete;
-        ~Profile() = default;
 
     public:
-        uint32_t Discover(const uint32_t waitTime, ClientSocket& socket, const std::list<UUID>& uuids, const Handler& handler)
+        uint32_t Discover(const std::list<UUID>& services, Tree& tree) const;
+
+    public:
+        uint32_t ServiceSearch(const std::list<UUID>& services, std::vector<uint32_t>& outHandles) const;
+
+        uint32_t ServiceAttribute(const uint32_t serviceHandle,
+                                  const std::list<uint32_t>& attributeIdRanges,
+                                  std::list<std::pair<uint32_t, Buffer>>& outAttributes) const;
+
+        uint32_t ServiceSearchAttribute(const std::list<UUID>& services,
+                                        const std::list<uint32_t>& attributeIdRanges,
+                                        std::list<std::pair<uint32_t, Buffer>>& outAttributes) const;
+
+    private:
+        uint32_t InternalServiceAttribute(const PDU::pduid id,
+                                          const std::function<void(Payload&)>& buildCb,
+                                          const std::list<uint32_t>& attributeIdRanges,
+                                          std::list<std::pair<uint32_t, Buffer>>& outAttributes) const;
+
+    private:
+        uint32_t Execute(ClientSocket::Command& cmd, const Payload::Inspector& inspectorCb = nullptr) const;
+
+    private:
+        uint16_t Capacity(const PDU& pdu) const
         {
-            // This will build a SDP service tree by querying the SDP server on the remote device for services complying to the selected UUIDs.
+            const uint16_t bufferSize = std::min<uint16_t>(pdu.Capacity(), (_socket.InputMTU() - PDU::HeaderSize));
+            ASSERT(bufferSize >= (1 + PDU::MaxContinuationSize));
 
-            uint32_t result = Core::ERROR_INPROGRESS;
-
-            _handler = handler;
-            _socket = &socket;
-            _expired = Core::Time::Now().Add(waitTime).Ticks();
-
-            // Firstly, pick up available services
-            _command.ServiceSearch(uuids);
-            _socket->Execute(waitTime, _command, [&](const ClientSocket::Command& cmd) {
-                if ((cmd.Status() == Core::ERROR_NONE)
-                        && (cmd.Result().Status() == ClientSocket::PDU::Success)
-                        && (cmd.Result().Type() == ClientSocket::PDU::ServiceSearchResponse)) {
-                            ServiceSearchFinished(cmd.Result());
-                } else {
-                    Report(Core::ERROR_GENERAL);
-                }
-            });
-
-            return (result);
+            return (bufferSize - (1 + PDU::MaxContinuationSize));
         }
 
     private:
-        void ServiceSearchFinished(const ClientSocket::Command::Response& response)
-        {
-            _services.clear();
+        ClientSocket& _socket;
+    }; // class Client
 
-            if (response.Handles().empty() == false) {
-                for (uint32_t const& handle : response.Handles()) {
-                    if (Find(handle) == nullptr) {
-                        _services.emplace_back(handle);
-                    } else {
-                        TRACE_L1("Service handle 0x%08x already exists?", handle);
-                    }
-                }
-
-                _servicesIterator = _services.begin();
-                RetrieveAttributes();
-            } else {
-                Report(Core::ERROR_NONE);
-            }
-        }
-        void RetrieveAttributes()
-        {
-            // Secondly, for each service pick up its attributes.
-
-            if (_servicesIterator != _services.end()) {
-                const uint32_t waitTime = AvailableTime();
-                if (waitTime > 0) {
-                    _command.ServiceAttribute((*_servicesIterator).Handle());
-                    _socket->Execute(waitTime, _command, [&](const ClientSocket::Command& cmd) {
-                        if ((cmd.Status() == Core::ERROR_NONE)
-                            && (cmd.Result().Status() == ClientSocket::PDU::Success)
-                            && (cmd.Result().Type() == ClientSocket::PDU::ServiceAttributeResponse)) {
-                                ServiceAttributeFinished(cmd.Result());
-                        } else {
-                            Report(Core::ERROR_GENERAL);
-                        }
-                    });
-                }
-            } else {
-                Report(Core::ERROR_NONE);
-            }
-        }
-        void ServiceAttributeFinished(const ClientSocket::Command::Response& response)
-        {
-            // Deserialize the received attributes.
-
-            for (auto const& kv : response.Attributes()) {
-                (*_servicesIterator).Deserialize(kv.first, kv.second);
-            }
-
-            _servicesIterator++;
-            RetrieveAttributes();
-        }
-        void Report(const uint32_t result)
-        {
-            // Discovery process has finished.
-
-            if (_socket != nullptr) {
-                Handler caller = _handler;
-                _socket = nullptr;
-                _handler = nullptr;
-                _expired = 0;
-
-                caller(result);
-            }
-        }
-        uint32_t AvailableTime()
-        {
-            uint64_t now = Core::Time::Now().Ticks();
-            uint32_t result = (now >= _expired ? 0 : static_cast<uint32_t>((_expired - now) / Core::Time::TicksPerMillisecond));
-            if (result == 0) {
-                Report(Core::ERROR_TIMEDOUT);
-            }
-            return (result);
-        }
+    class Server {
+        using Handler = ServerSocket::ResponseHandler;
 
     public:
-        ClientSocket* _socket;
-        ClientSocket::Command _command;
-        Handler _handler;
-        std::list<Service>::iterator _servicesIterator;
-        uint64_t _expired;
-    }; // class Profile
+        Server() = default;
+        Server(const Server&) = delete;
+        Server& operator=(const Server&) = delete;
+        virtual ~Server() = default;
+
+    public:
+        virtual void WithServiceTree(const std::function<void(const Tree&)>& inspectCb) = 0;
+
+    public:
+        void OnPDU(const ServerSocket& socket, const PDU& pdu, const Handler& handler)
+        {
+            switch (pdu.Type()) {
+            case PDU::ServiceSearchRequest:
+                OnServiceSearchRequest(socket, pdu, handler);
+                break;
+            case PDU::ServiceAttributeRequest:
+                OnServiceAttributeRequest(socket, pdu, handler);
+                break;
+            case PDU::ServiceSearchAttributeRequest:
+                OnServiceSearchAttributeRequest(socket, pdu, handler);
+                break;
+            default:
+                TRACE_L1("SDP server: Usupported PDU %d", pdu.Type());
+                handler(PDU::InvalidRequestSyntax);
+                break;
+            }
+        }
+
+    private:
+        void OnServiceSearchRequest(const ServerSocket& socket, const PDU& pdu, const Handler& handler);
+        void OnServiceAttributeRequest(const ServerSocket& socket, const PDU& pdu, const Handler& handler);
+        void OnServiceSearchAttributeRequest(const ServerSocket& socket, const PDU& pdu, const Handler& handler);
+
+    private:
+        void InternalOnServiceSearchAttributeRequest(const PDU::pduid id,
+                                                     const std::function<PDU::errorid(const Payload&, std::list<uint32_t>&)>& inspectCb,
+                                                     const ServerSocket& socket,
+                                                     const PDU& request,
+                                                     const Handler& handlerCb);
+
+        std::map<uint16_t, Buffer> SerializeAttributesByRange(const Service& service, const std::list<uint32_t>& attributeRanges, 
+                                                              const uint16_t offset, uint16_t& count) const;
+ 
+
+    private:
+        uint16_t Capacity(const ServerSocket& socket, const PDU& pdu) const
+        {
+            const uint16_t bufferSize = std::min<uint16_t>(pdu.Capacity(), (socket.OutputMTU() - PDU::HeaderSize));
+            ASSERT(bufferSize >= (1 + PDU::MaxContinuationSize));
+
+            return (bufferSize - (1 + PDU::MaxContinuationSize));
+        }
+
+    }; // class Server
 
 } // namespace SDP
 

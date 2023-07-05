@@ -18,7 +18,6 @@
  */
 
 #include "GATTSocket.h"
-#include "UUID.h"
 
 namespace WPEFramework {
 
