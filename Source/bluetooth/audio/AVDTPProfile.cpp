@@ -143,7 +143,7 @@ namespace AVDTP {
     }
 
     /* private */
-    uint32_t Client::Execute(AVDTP::Socket::Command<Client>& cmd, const Payload::Inspector& inspectorCb) const
+    uint32_t Client::Execute(AVDTP::Socket::CommandType<Client>& cmd, const Payload::Inspector& inspectorCb) const
     {
         uint32_t result = Core::ERROR_ASYNC_FAILED;
 
@@ -178,7 +178,7 @@ namespace AVDTP {
             uint8_t id = 0;
 
             // Serialize all endpoints...
-            while (WithEndpoint(++id, [&](const StreamEndPoint& ep) {
+            while (Visit(++id, [&](const StreamEndPoint& ep) {
                 ep.Serialize(payload);
             }) == true);
 
@@ -191,7 +191,7 @@ namespace AVDTP {
     {
         // Retrieves basic capabilities of a particular endpoint.
 
-        if (WithEndpoint(seid, [&](const StreamEndPoint& ep) {
+        if (Visit(seid, [&](const StreamEndPoint& ep) {
             ASSERT(ep.Capabilities().empty() == false);
 
             // Serialize this endpoints capabilities...
@@ -221,7 +221,7 @@ namespace AVDTP {
     {
         // Retrieves all capabilities of a particular endpoint.
 
-        if (WithEndpoint(seid, [&](const StreamEndPoint& ep) {
+        if (Visit(seid, [&](const StreamEndPoint& ep) {
             ASSERT(ep.Capabilities().empty() == false);
 
             // Serialize this endpoints capabilities...
@@ -276,7 +276,7 @@ namespace AVDTP {
         if (code == Signal::errorcode::SUCCESS) {
             code = Signal::errorcode::BAD_ACP_SEID;
 
-            WithEndpoint(acpSeid, [&](StreamEndPoint& ep) {
+            Visit(acpSeid, [&](StreamEndPoint& ep) {
                 code = DeserializeConfig(config, ep, failedCategory, [](const StreamEndPoint::Service::categorytype category) {
                     if (StreamEndPoint::Service::IsValidCategory(category) == true) {
                         return (Signal::errorcode::SUCCESS);
@@ -328,7 +328,7 @@ namespace AVDTP {
         if (code == Signal::errorcode::SUCCESS) {
             code = Signal::errorcode::BAD_ACP_SEID;
 
-            WithEndpoint(seid, [&](StreamEndPoint& ep) {
+            Visit(seid, [&](StreamEndPoint& ep) {
                 code = DeserializeConfig(config, ep, failedCategory, [](const StreamEndPoint::Service::categorytype category) {
                     if (StreamEndPoint::Service::IsValidCategory(category) == false) {
                         return (Signal::errorcode::BAD_SERV_CATEGORY);
@@ -357,7 +357,7 @@ namespace AVDTP {
 
         Signal::errorcode code = Signal::errorcode::BAD_ACP_SEID;
 
-        WithEndpoint(seid, [&](StreamEndPoint& ep) {
+        Visit(seid, [&](StreamEndPoint& ep) {
             code = ToSignalCode(ep.OnOpen());
         });
 
@@ -370,7 +370,7 @@ namespace AVDTP {
 
         Signal::errorcode code = Signal::errorcode::BAD_ACP_SEID;
 
-        WithEndpoint(seid, [&](StreamEndPoint& ep) {
+        Visit(seid, [&](StreamEndPoint& ep) {
             code = ToSignalCode(ep.OnClose());
         });
 
@@ -383,7 +383,7 @@ namespace AVDTP {
 
         Signal::errorcode code = Signal::errorcode::BAD_ACP_SEID;
 
-        WithEndpoint(seid, [&](StreamEndPoint& ep) {
+        Visit(seid, [&](StreamEndPoint& ep) {
             code = ToSignalCode(ep.OnStart());
         });
 
@@ -396,7 +396,7 @@ namespace AVDTP {
 
         Signal::errorcode code = Signal::errorcode::BAD_ACP_SEID;
 
-        WithEndpoint(seid, [&](StreamEndPoint& ep) {
+        Visit(seid, [&](StreamEndPoint& ep) {
             code = ToSignalCode(ep.OnSuspend());
         });
 
@@ -409,7 +409,7 @@ namespace AVDTP {
 
         Signal::errorcode code = Signal::errorcode::BAD_ACP_SEID;
 
-        WithEndpoint(seid, [&](StreamEndPoint& ep) {
+        Visit(seid, [&](StreamEndPoint& ep) {
             code = ToSignalCode(ep.OnAbort());
         });
 

@@ -303,7 +303,7 @@ namespace AVDTP {
 
     public:
         template<typename ADMIN>
-        class EXTERNAL Command : public Core::IOutbound, public Core::IInbound {
+        class EXTERNAL CommandType : public Core::IOutbound, public Core::IInbound {
         public:
             class EXTERNAL Request : public Signal {
             public:
@@ -381,15 +381,15 @@ namespace AVDTP {
             }; // class Response
 
         public:
-            Command(const Command&) = delete;
-            Command& operator=(const Command&) = delete;
-            Command(ADMIN& admin)
+            CommandType(const CommandType&) = delete;
+            CommandType& operator=(const CommandType&) = delete;
+            CommandType(ADMIN& admin)
                 : _admin(admin)
                 , _request()
                 , _response()
             {
             }
-            ~Command() = default;
+            ~CommandType() = default;
 
         public:
             template<typename... Args>
@@ -468,7 +468,6 @@ namespace AVDTP {
             , _omtu(0)
             , _type(SIGNALLING)
             , _sync(true, true)
-            , _busy(false)
         {
         }
         Socket(const SOCKET& connector, const Core::NodeId& remoteNode)
@@ -481,7 +480,6 @@ namespace AVDTP {
             , _omtu(0)
             , _type(SIGNALLING)
             , _sync(true, true)
-            , _busy(false)
         {
         }
         ~Socket() = default;
@@ -492,9 +490,6 @@ namespace AVDTP {
         }
         channeltype Type() const {
             return (_type);
-        }
-        bool IsBusy() const {
-            return (_busy);
         }
 
     public:
@@ -507,10 +502,6 @@ namespace AVDTP {
             ASSERT(type < RECOVERY);
             TRACE_L1("AVDTP: Changed channel type to: %s", labels[type]);
 #endif
-        }
-        void Busy(const bool busy)
-        {
-            _busy = busy;
         }
 
     protected:
@@ -692,7 +683,6 @@ namespace AVDTP {
         uint16_t _omtu;
         channeltype _type;
         Core::Event _sync;
-        std::atomic<bool> _busy;
     }; // class Socket
 
 } // namespace AVDTP

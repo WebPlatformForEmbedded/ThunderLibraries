@@ -410,11 +410,11 @@ namespace AVDTP {
         }
 
     private:
-        uint32_t Execute(Socket::Command<Client>& cmd, const Payload::Inspector& inspectorCb = nullptr) const;
+        uint32_t Execute(Socket::CommandType<Client>& cmd, const Payload::Inspector& inspectorCb = nullptr) const;
 
     private:
         Socket* _socket;
-        mutable AVDTP::Socket::Command<Client> _command;
+        mutable AVDTP::Socket::CommandType<Client> _command;
     }; // class Client
 
     class EXTERNAL Server {
@@ -427,7 +427,7 @@ namespace AVDTP {
         virtual ~Server() = default;
 
     public:
-        virtual bool WithEndpoint(const uint8_t id, const std::function<void(StreamEndPoint&)>& inspectCb) = 0;
+        virtual bool Visit(const uint8_t id, const std::function<void(StreamEndPoint&)>& inspectCb) = 0;
 
     public:
         void OnSignal(const Signal& signal, const Handler& handler)
