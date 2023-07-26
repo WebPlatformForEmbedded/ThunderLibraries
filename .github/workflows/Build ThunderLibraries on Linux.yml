@@ -8,11 +8,11 @@ on:
   workflow_call:
 
 jobs:
-  ThunderInterfaces:
-    uses: rdkcentral/ThunderInterfaces/.github/workflows/Build ThunderInterfaces on Linux.yml@master
+  Thunder:
+    uses: rdkcentral/Thunder/.github/workflows/Build ThunderInterfaces on Linux.yml@master
 
   ThunderLibraries:
-    needs: ThunderInterfaces
+    needs: Thunder
 
     runs-on: ubuntu-latest
 
@@ -41,16 +41,10 @@ jobs:
         path: Thunder
         repository: rdkcentral/Thunder
 
-    - name: Checkout ThunderInterfaces
-      uses: actions/checkout@v3
-      with:
-        path: ThunderInterfaces
-        repository: rdkcentral/ThunderInterfaces
-
     - name: Download artifacts
       uses: actions/download-artifact@v3
       with:
-        name: ThunderInterfaces-${{matrix.build_type}}-artifact
+        name: Thunder-${{matrix.build_type}}-artifact
         path: ${{matrix.build_type}}
 
     - name: Unpack files
@@ -79,7 +73,6 @@ jobs:
         -DCMAKE_INSTALL_PREFIX="${{matrix.build_type}}/install/usr" \
         -DCMAKE_MODULE_PATH="${PWD}/${{matrix.build_type}}/install/usr/include/WPEFramework/Modules" \
         -DBROADCAST=ON \
-        -DCOMPOSITOR_BUFFER=ON \
         ${{steps.libs.outputs.first_match}}
         cmake --build ${{matrix.build_type}}/build/ThunderLibraries --target install
 
