@@ -72,7 +72,6 @@ jobs:
         cmake -G Ninja -S ThunderLibraries -B ${{matrix.build_type}}/build/ThunderLibraries \
         -DCMAKE_INSTALL_PREFIX="${{matrix.build_type}}/install/usr" \
         -DCMAKE_MODULE_PATH="${PWD}/${{matrix.build_type}}/install/usr/include/WPEFramework/Modules" \
-        -DBLUETOOTH=ON \
         -DBROADCAST=ON \
         -DCOMPOSITOR_BUFFER=ON \
         ${{steps.libs.outputs.first_match}}
