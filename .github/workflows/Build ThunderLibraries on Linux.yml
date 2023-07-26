@@ -8,11 +8,11 @@ on:
   workflow_call:
 
 jobs:
-  Thunder:
-    uses: rdkcentral/Thunder/.github/workflows/Build Thunder on Linux.yml@master
+  ThunderInterfaces:
+    uses: rdkcentral/ThunderInterfaces/.github/workflows/Build ThunderInterfaces on Linux.yml@master
 
   ThunderLibraries:
-    needs: Thunder
+    needs: ThunderInterfaces
 
     runs-on: ubuntu-latest
 
@@ -41,10 +41,16 @@ jobs:
         path: Thunder
         repository: rdkcentral/Thunder
 
+    - name: Checkout ThunderInterfaces
+      uses: actions/checkout@v3
+      with:
+        path: ThunderInterfaces
+        repository: rdkcentral/ThunderInterfaces
+
     - name: Download artifacts
       uses: actions/download-artifact@v3
       with:
-        name: Thunder-${{matrix.build_type}}-artifact
+        name: ThunderInterfaces-${{matrix.build_type}}-artifact
         path: ${{matrix.build_type}}
 
     - name: Unpack files
