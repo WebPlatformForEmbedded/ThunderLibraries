@@ -30,8 +30,8 @@ message("Setup ${TARGET} v${PROJECT_VERSION}")
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
 
 option(BCM43XX "Select the serial driver for bluetooth modules found on RaspberryPi's" OFF)
-option(GATT_SUPPORT "Include GATT support" ON)
-option(AUDIO_SUPPORT "Include audio sink/source support" ON)
+option(BLUETOOTH_GATT_SUPPORT "Include GATT support" OFF)
+option(BLUETOOTH_AUDIO_SUPPORT "Include audio sink/source support" OFF)
 
 find_package(Bluez5UtilHeaders REQUIRED)
 find_package(BCM_HOST QUIET)
@@ -129,10 +129,10 @@ InstallCMakeConfig(
     TARGETS ${TARGET}
 )
 
-if(GATT_SUPPORT)
+if(BLUETOOTH_GATT_SUPPORT)
     add_subdirectory(gatt)
 endif()
 
-if(AUDIO_SUPPORT)
+if(BLUETOOTH_AUDIO_SUPPORT)
     add_subdirectory(audio)
 endif()
