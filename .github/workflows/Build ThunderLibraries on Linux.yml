@@ -2,14 +2,14 @@ name: Build ThunderLibraries on Linux
 
 on:
   push:
-    branches: ["main"]
+    branches: ["development/actions-warnings"] # CHANGE TO MASTER
   pull_request:
     branches: ["main"]
   workflow_call:
 
 jobs:
   Thunder:
-    uses: rdkcentral/Thunder/.github/workflows/Build Thunder on Linux.yml@master
+    uses: VeithMetro/Thunder/.github/workflows/Build Thunder on Linux.yml@master # CHANGE TO RDKCENTRAL
 
   ThunderLibraries:
     needs: Thunder
@@ -57,6 +57,7 @@ jobs:
       with:
         path: ThunderLibraries
         repository: ${{github.repository_owner}}/ThunderLibraries
+        ref: development/actions-warnings # REMOVE
 
     - name: Regex ThunderLibraries
       if: contains(github.event.pull_request.body, '[Options:')
@@ -70,6 +71,7 @@ jobs:
     - name: Build ThunderLibraries
       run: |
         cmake -G Ninja -S ThunderLibraries -B ${{matrix.build_type}}/build/ThunderLibraries \
+        -DCMAKE_CXX_FLAGS="-Wall -Wextra -Wpedantic" \
         -DCMAKE_INSTALL_PREFIX="${{matrix.build_type}}/install/usr" \
         -DCMAKE_MODULE_PATH="${PWD}/${{matrix.build_type}}/install/usr/include/WPEFramework/Modules" \
         -DBROADCAST=ON \
