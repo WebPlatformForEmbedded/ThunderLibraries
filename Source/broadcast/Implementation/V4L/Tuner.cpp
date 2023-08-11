@@ -120,15 +120,15 @@ namespace Broadcast {
     };
     /*
 static constexpr conversion_entry _tablePilot[] = {
-    { (Broadcast::PILOT_AUTO,              PILOT_AUTO },
-    { (Broadcast::PILOT_ON,                PILOT_ON   },
-    { (Broadcast::PILOT_OFF,               PILOT_OFF  }
+    { Broadcast::PILOT_AUTO,              PILOT_AUTO },
+    { Broadcast::PILOT_ON,                PILOT_ON   },
+    { Broadcast::PILOT_OFF,               PILOT_OFF  }
 };
 static constexpr conversion_entry _tableRollOff[] = {
-    { (Broadcast::HIERARCHY_AUTO,          ROLLOFF_AUTO },
-    { (Broadcast::ROLLOFF_20,              ROLLOFF_20   },
-    { (Broadcast::ROLLOFF_25,              ROLLOFF_25   },
-    { (Broadcast::ROLLOFF_35,              ROLLOFF_35   }
+    { Broadcast::HIERARCHY_AUTO,          ROLLOFF_AUTO },
+    { Broadcast::ROLLOFF_20,              ROLLOFF_20   },
+    { Broadcast::ROLLOFF_25,              ROLLOFF_25   },
+    { Broadcast::ROLLOFF_35,              ROLLOFF_35   }
 };
 */
 
