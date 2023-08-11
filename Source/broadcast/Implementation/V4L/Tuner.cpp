@@ -44,7 +44,7 @@ namespace Broadcast {
     };
 
     static constexpr conversion_entry _tableSystemType[] = {
-        { .from = ITuner::DVB | ITuner::Cable | ITuner::B, .to = SYS_DVBC_ANNEX_B },
+        { (ITuner::DVB | ITuner::Cable | ITuner::B), SYS_DVBC_ANNEX_B },
         { .from = ITuner::DVB | ITuner::Cable | ITuner::C, .to = SYS_DVBC_ANNEX_C },
         { .from = ITuner::DVB | ITuner::Terrestrial | ITuner::NoAnnex, .to = SYS_DVBT },
         { .from = ITuner::DVB | ITuner::Terrestrial | ITuner::A, .to = SYS_DVBT2 },
