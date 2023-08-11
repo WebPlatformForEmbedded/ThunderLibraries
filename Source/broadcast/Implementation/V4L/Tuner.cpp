@@ -776,13 +776,13 @@ POP_WARNING()
                     }
 
                     unsigned int delta = _lastState ^ status;
-                    if (delta & FE_HAS_SIGNAL)  { TRACE_L1 ("FE_HAS_SIGNAL:  %s", status & FE_HAS_SIGNAL  ? _T("true") : _T("false")) };
-                    if (delta & FE_HAS_CARRIER) { TRACE_L1 ("FE_HAS_CARRIER: %s", status & FE_HAS_CARRIER ? _T("true") : _T("false")) };
-                    if (delta & FE_HAS_VITERBI) { TRACE_L1 ("FE_HAS_VITERBI: %s", status & FE_HAS_VITERBI ? _T("true") : _T("false")) };
-                    if (delta & FE_HAS_SYNC)    { TRACE_L1 ("FE_HAS_SYNC:    %s", status & FE_HAS_SYNC    ? _T("true") : _T("false")) };
-                    if (delta & FE_TIMEDOUT)    { TRACE_L1 ("FE_TIMEDOUT:    %s", status & FE_TIMEDOUT    ? _T("true") : _T("false")) };
-                    if (delta & FE_REINIT)      { TRACE_L1 ("FE_REINIT:      %s", status & FE_REINIT      ? _T("true") : _T("false")) };
-                    if (delta & FE_HAS_LOCK)    { TRACE_L1 ("FE_HAS_LOCK:    %s", status & FE_HAS_LOCK    ? _T("true") : _T("false")) };
+                    if (delta & FE_HAS_SIGNAL)  { TRACE_L1 ("FE_HAS_SIGNAL:  %s", status & FE_HAS_SIGNAL  ? _T("true") : _T("false")); }
+                    if (delta & FE_HAS_CARRIER) { TRACE_L1 ("FE_HAS_CARRIER: %s", status & FE_HAS_CARRIER ? _T("true") : _T("false")); }
+                    if (delta & FE_HAS_VITERBI) { TRACE_L1 ("FE_HAS_VITERBI: %s", status & FE_HAS_VITERBI ? _T("true") : _T("false")); }
+                    if (delta & FE_HAS_SYNC)    { TRACE_L1 ("FE_HAS_SYNC:    %s", status & FE_HAS_SYNC    ? _T("true") : _T("false")); }
+                    if (delta & FE_TIMEDOUT)    { TRACE_L1 ("FE_TIMEDOUT:    %s", status & FE_TIMEDOUT    ? _T("true") : _T("false")); }
+                    if (delta & FE_REINIT)      { TRACE_L1 ("FE_REINIT:      %s", status & FE_REINIT      ? _T("true") : _T("false")); }
+                    if (delta & FE_HAS_LOCK)    { TRACE_L1 ("FE_HAS_LOCK:    %s", status & FE_HAS_LOCK    ? _T("true") : _T("false")); }
                     _lastState = status;
                 }
                 #endif
