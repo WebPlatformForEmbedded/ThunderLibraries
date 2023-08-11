@@ -50,7 +50,7 @@ namespace Broadcast {
             }
 
         public:
-            virtual void Activated(ITuner* tuner) override
+            virtual void Activated(ITuner* /* tuner */) override
             {
             }
             virtual void Deactivated(ITuner* tuner) override
