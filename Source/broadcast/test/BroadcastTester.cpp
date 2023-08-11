@@ -37,7 +37,7 @@ void printHelp(){
     printf("q -> Quit\n");
 }
 
-int main(int /* argc */, const char* /* argv[] */)
+int main(int /* argc */, const char** /* argv */)
 {
     const string configuration = "{ \
         \"frontends\":1, \
