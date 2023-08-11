@@ -628,9 +628,9 @@ POP_WARNING()
 
             Property(props[propertyCount++], DTV_TUNE, 0);
 
-            struct dtv_properties dtv_prop = {
-                .num = propertyCount, .props = props
-            };
+            struct dtv_properties dtv_prop;
+            dtv_prop.num = propertyCount;
+            dtv_prop.props = props;
 
             _state = IDLE;
 
