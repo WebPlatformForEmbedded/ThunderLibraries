@@ -45,90 +45,90 @@ namespace Broadcast {
 
     static constexpr conversion_entry _tableSystemType[] = {
         { (ITuner::DVB | ITuner::Cable | ITuner::B), SYS_DVBC_ANNEX_B },
-        { .from = ITuner::DVB | ITuner::Cable | ITuner::C, .to = SYS_DVBC_ANNEX_C },
-        { .from = ITuner::DVB | ITuner::Terrestrial | ITuner::NoAnnex, .to = SYS_DVBT },
-        { .from = ITuner::DVB | ITuner::Terrestrial | ITuner::A, .to = SYS_DVBT2 },
-        { .from = ITuner::DVB | ITuner::Satellite | ITuner::NoAnnex, .to = SYS_DVBS },
-        { .from = ITuner::DVB | ITuner::Satellite | ITuner::A, .to = SYS_DVBS2 },
-        { .from = ITuner::ISDB | ITuner::Satellite | ITuner::NoAnnex, .to = SYS_ISDBS },
-        { .from = ITuner::ISDB | ITuner::Terrestrial | ITuner::NoAnnex, .to = SYS_ISDBT },
-        { .from = ITuner::ISDB | ITuner::Cable | ITuner::NoAnnex, .to = SYS_ISDBC }
+        { (ITuner::DVB | ITuner::Cable | ITuner::C), SYS_DVBC_ANNEX_C },
+        { (ITuner::DVB | ITuner::Terrestrial | ITuner::NoAnnex), SYS_DVBT },
+        { (ITuner::DVB | ITuner::Terrestrial | ITuner::A), SYS_DVBT2 },
+        { (ITuner::DVB | ITuner::Satellite | ITuner::NoAnnex), SYS_DVBS },
+        { (ITuner::DVB | ITuner::Satellite | ITuner::A), SYS_DVBS2 },
+        { (ITuner::ISDB | ITuner::Satellite | ITuner::NoAnnex), SYS_ISDBS },
+        { (ITuner::ISDB | ITuner::Terrestrial | ITuner::NoAnnex), SYS_ISDBT },
+        { (ITuner::ISDB | ITuner::Cable | ITuner::NoAnnex), SYS_ISDBC }
     };
 
     static constexpr conversion_entry _tableInversion[] = {
-        { .from = Broadcast::Auto, .to = INVERSION_AUTO },
-        { .from = Broadcast::Normal, .to = INVERSION_OFF },
-        { .from = Broadcast::Inverted, .to = INVERSION_ON }
+        { Broadcast::Auto, INVERSION_AUTO },
+        { Broadcast::Normal, INVERSION_OFF },
+        { Broadcast::Inverted, INVERSION_ON }
     };
     static constexpr conversion_entry _tableFEC[] = {
-        { .from = Broadcast::FEC_INNER_NONE, .to = FEC_NONE },
-        { .from = Broadcast::FEC_INNER_UNKNOWN, .to = FEC_AUTO },
-        { .from = Broadcast::FEC_1_2, .to = FEC_1_2 },
-        { .from = Broadcast::FEC_2_3, .to = FEC_2_3 },
-        { .from = Broadcast::FEC_2_5, .to = FEC_2_5 },
-        { .from = Broadcast::FEC_3_4, .to = FEC_3_4 },
-        { .from = Broadcast::FEC_3_5, .to = FEC_3_5 },
-        { .from = Broadcast::FEC_4_5, .to = FEC_4_5 },
-        { .from = Broadcast::FEC_5_6, .to = FEC_5_6 },
-        { .from = Broadcast::FEC_6_7, .to = FEC_6_7 },
-        { .from = Broadcast::FEC_7_8, .to = FEC_7_8 },
-        { .from = Broadcast::FEC_8_9, .to = FEC_8_9 },
-        { .from = Broadcast::FEC_9_10, .to = FEC_9_10 }
+        { Broadcast::FEC_INNER_NONE, FEC_NONE },
+        { Broadcast::FEC_INNER_UNKNOWN, FEC_AUTO },
+        { Broadcast::FEC_1_2, FEC_1_2 },
+        { Broadcast::FEC_2_3, FEC_2_3 },
+        { Broadcast::FEC_2_5, FEC_2_5 },
+        { Broadcast::FEC_3_4, FEC_3_4 },
+        { Broadcast::FEC_3_5, FEC_3_5 },
+        { Broadcast::FEC_4_5, FEC_4_5 },
+        { Broadcast::FEC_5_6, FEC_5_6 },
+        { Broadcast::FEC_6_7, FEC_6_7 },
+        { Broadcast::FEC_7_8, FEC_7_8 },
+        { Broadcast::FEC_8_9, FEC_8_9 },
+        { Broadcast::FEC_9_10, FEC_9_10 }
     };
     static constexpr conversion_entry _tableModulation[] = {
-        { .from = Broadcast::HORIZONTAL_QPSK, .to = QPSK },
-        { .from = Broadcast::VERTICAL_QPSK, .to = QPSK },
-        { .from = Broadcast::LEFT_QPSK, .to = QPSK },
-        { .from = Broadcast::RIGHT_QPSK, .to = QPSK },
-        { .from = Broadcast::HORIZONTAL_8PSK, .to = PSK_8 },
-        { .from = Broadcast::VERTICAL_8PSK, .to = PSK_8 },
-        { .from = Broadcast::LEFT_8PSK, .to = PSK_8 },
-        { .from = Broadcast::RIGHT_8PSK, .to = PSK_8 },
-        { .from = Broadcast::QAM16, .to = QAM_16 },
-        { .from = Broadcast::QAM32, .to = QAM_32 },
-        { .from = Broadcast::QAM64, .to = QAM_64 },
-        { .from = Broadcast::QAM128, .to = QAM_128 },
-        { .from = Broadcast::QAM256, .to = QAM_256 },
+        { Broadcast::HORIZONTAL_QPSK, QPSK },
+        { Broadcast::VERTICAL_QPSK, QPSK },
+        { Broadcast::LEFT_QPSK, QPSK },
+        { Broadcast::RIGHT_QPSK, QPSK },
+        { Broadcast::HORIZONTAL_8PSK, PSK_8 },
+        { Broadcast::VERTICAL_8PSK, PSK_8 },
+        { Broadcast::LEFT_8PSK, PSK_8 },
+        { Broadcast::RIGHT_8PSK, PSK_8 },
+        { Broadcast::QAM16, QAM_16 },
+        { Broadcast::QAM32, QAM_32 },
+        { Broadcast::QAM64, QAM_64 },
+        { Broadcast::QAM128, QAM_128 },
+        { Broadcast::QAM256, QAM_256 },
     };
     static constexpr conversion_entry _tableTransmission[] = {
-        { .from = Broadcast::TRANSMISSION_AUTO, .to = TRANSMISSION_MODE_AUTO },
-        { .from = Broadcast::TRANSMISSION_1K, .to = TRANSMISSION_MODE_1K },
-        { .from = Broadcast::TRANSMISSION_2K, .to = TRANSMISSION_MODE_2K },
-        { .from = Broadcast::TRANSMISSION_4K, .to = TRANSMISSION_MODE_4K },
-        { .from = Broadcast::TRANSMISSION_8K, .to = TRANSMISSION_MODE_8K },
-        { .from = Broadcast::TRANSMISSION_16K, .to = TRANSMISSION_MODE_16K },
-        { .from = Broadcast::TRANSMISSION_32K, .to = TRANSMISSION_MODE_32K },
-        { .from = Broadcast::TRANSMISSION_C3780, .to = TRANSMISSION_MODE_C3780 },
-        { .from = Broadcast::TRANSMISSION_C1, .to = TRANSMISSION_MODE_C1 }
+        { Broadcast::TRANSMISSION_AUTO, TRANSMISSION_MODE_AUTO },
+        { Broadcast::TRANSMISSION_1K, TRANSMISSION_MODE_1K },
+        { Broadcast::TRANSMISSION_2K, TRANSMISSION_MODE_2K },
+        { Broadcast::TRANSMISSION_4K, TRANSMISSION_MODE_4K },
+        { Broadcast::TRANSMISSION_8K, TRANSMISSION_MODE_8K },
+        { Broadcast::TRANSMISSION_16K, TRANSMISSION_MODE_16K },
+        { Broadcast::TRANSMISSION_32K, TRANSMISSION_MODE_32K },
+        { Broadcast::TRANSMISSION_C3780, TRANSMISSION_MODE_C3780 },
+        { Broadcast::TRANSMISSION_C1, TRANSMISSION_MODE_C1 }
     };
     static constexpr conversion_entry _tableGuard[] = {
-        { .from = Broadcast::GUARD_AUTO, .to = GUARD_INTERVAL_AUTO },
-        { .from = Broadcast::GUARD_1_4, .to = GUARD_INTERVAL_1_4 },
-        { .from = Broadcast::GUARD_1_8, .to = GUARD_INTERVAL_1_8 },
-        { .from = Broadcast::GUARD_1_16, .to = GUARD_INTERVAL_1_16 },
-        { .from = Broadcast::GUARD_1_32, .to = GUARD_INTERVAL_1_32 },
-        { .from = Broadcast::GUARD_1_128, .to = GUARD_INTERVAL_1_128 },
-        { .from = Broadcast::GUARD_19_128, .to = GUARD_INTERVAL_19_128 },
-        { .from = Broadcast::GUARD_19_256, .to = GUARD_INTERVAL_19_256 }
+        { Broadcast::GUARD_AUTO, GUARD_INTERVAL_AUTO },
+        { Broadcast::GUARD_1_4, GUARD_INTERVAL_1_4 },
+        { Broadcast::GUARD_1_8, GUARD_INTERVAL_1_8 },
+        { Broadcast::GUARD_1_16, GUARD_INTERVAL_1_16 },
+        { Broadcast::GUARD_1_32, GUARD_INTERVAL_1_32 },
+        { Broadcast::GUARD_1_128, GUARD_INTERVAL_1_128 },
+        { Broadcast::GUARD_19_128, GUARD_INTERVAL_19_128 },
+        { Broadcast::GUARD_19_256, GUARD_INTERVAL_19_256 }
     };
     static constexpr conversion_entry _tableHierarchy[] = {
-        { .from = Broadcast::NoHierarchy, .to = HIERARCHY_NONE },
-        { .from = Broadcast::AutoHierarchy, .to = HIERARCHY_AUTO },
-        { .from = Broadcast::Hierarchy1, .to = HIERARCHY_1 },
-        { .from = Broadcast::Hierarchy2, .to = HIERARCHY_2 },
-        { .from = Broadcast::Hierarchy4, .to = HIERARCHY_4 }
+        { Broadcast::NoHierarchy, HIERARCHY_NONE },
+        { Broadcast::AutoHierarchy, HIERARCHY_AUTO },
+        { Broadcast::Hierarchy1, HIERARCHY_1 },
+        { Broadcast::Hierarchy2, HIERARCHY_2 },
+        { Broadcast::Hierarchy4, HIERARCHY_4 }
     };
     /*
 static constexpr conversion_entry _tablePilot[] = {
-    { .from = Broadcast::PILOT_AUTO,              .to = PILOT_AUTO },
-    { .from = Broadcast::PILOT_ON,                .to = PILOT_ON   },
-    { .from = Broadcast::PILOT_OFF,               .to = PILOT_OFF  }
+    { (Broadcast::PILOT_AUTO,              PILOT_AUTO },
+    { (Broadcast::PILOT_ON,                PILOT_ON   },
+    { (Broadcast::PILOT_OFF,               PILOT_OFF  }
 };
 static constexpr conversion_entry _tableRollOff[] = {
-    { .from = Broadcast::HIERARCHY_AUTO,          .to = ROLLOFF_AUTO },
-    { .from = Broadcast::ROLLOFF_20,              .to = ROLLOFF_20   },
-    { .from = Broadcast::ROLLOFF_25,              .to = ROLLOFF_25   },
-    { .from = Broadcast::ROLLOFF_35,              .to = ROLLOFF_35   }
+    { (Broadcast::HIERARCHY_AUTO,          ROLLOFF_AUTO },
+    { (Broadcast::ROLLOFF_20,              ROLLOFF_20   },
+    { (Broadcast::ROLLOFF_25,              ROLLOFF_25   },
+    { (Broadcast::ROLLOFF_35,              ROLLOFF_35   }
 };
 */
 
