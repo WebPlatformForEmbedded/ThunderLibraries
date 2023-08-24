@@ -813,8 +813,9 @@ namespace Bluetooth {
         // Create definitions for the HCI commands
         // ------------------------------------------------------------------------
         struct Command {
+PUSH_WARNING(DISABLE_WARNING_PEDANTIC)
             using Void = char[0];
-
+POP_WARNING()
             typedef CommandType<cmd_opcode_pack(OGF_LINK_CTL, OCF_INQUIRY), inquiry_cp, uint8_t>
                 Inquiry;
 
