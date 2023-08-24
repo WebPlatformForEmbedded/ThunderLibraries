@@ -31,14 +31,14 @@ ENUM_CONVERSION_BEGIN(Bluetooth::A2DP::SBC::preset)
     { Bluetooth::A2DP::SBC::MQ, _TXT("MQ") },
     { Bluetooth::A2DP::SBC::HQ, _TXT("HQ") },
     { Bluetooth::A2DP::SBC::XQ, _TXT("XQ") },
-ENUM_CONVERSION_END(Bluetooth::A2DP::SBC::preset);
+ENUM_CONVERSION_END(Bluetooth::A2DP::SBC::preset)
 
 ENUM_CONVERSION_BEGIN(Bluetooth::A2DP::SBC::Config::channelmode)
     { Bluetooth::A2DP::SBC::Config::MONO, _TXT("Mono") },
     { Bluetooth::A2DP::SBC::Config::STEREO, _TXT("Stereo") },
     { Bluetooth::A2DP::SBC::Config::JOINT_STEREO, _TXT("JointSstereo") },
     { Bluetooth::A2DP::SBC::Config::DUAL_CHANNEL, _TXT("DualChannel") },
-ENUM_CONVERSION_END(Bluetooth::A2DP::SBC::Config::channelmode);
+ENUM_CONVERSION_END(Bluetooth::A2DP::SBC::Config::channelmode)
 
 namespace Bluetooth {
 

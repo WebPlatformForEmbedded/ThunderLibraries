@@ -455,7 +455,7 @@ namespace AVDTP {
         }
 
         return (code);
-    };
+    }
 
 } // namespace AVDTP
 
