@@ -326,7 +326,7 @@ namespace SDP {
                         uuid = Bluetooth::UUID((_buffer[_readerOffset] << 24) | (_buffer[_readerOffset + 1] << 16)
                                                 | (_buffer[_readerOffset + 2] << 8) | _buffer[_readerOffset + 3]);
                     } else {
-                        uint8_t buffer[size];
+                        uint8_t* buffer = static_cast<uint8_t*>(ALLOCA(size));
                         uint8_t i = size;
                         while (i-- > 0) {
                             buffer[i] = _buffer[_readerOffset++];
