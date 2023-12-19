@@ -205,7 +205,7 @@ namespace AVDTP {
                             idLabels[static_cast<uint8_t>(_id)],
                             _payload.Length(), _expectedPackets);
 #else
-            return (Core::Format("signal #%d type %d id %d", _label _type, _id));
+            return (Core::Format("signal #%d type %d id %d", _label, _type, _id));
 #endif
         }
 
