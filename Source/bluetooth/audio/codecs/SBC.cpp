@@ -482,7 +482,9 @@ namespace A2DP {
         TRACE(Trace::Information, (_T("New bitpool value for SBC: %d"), _bitpool));
 
         SBCConfigure();
-        DumpBitrateConfiguration();
+        #ifdef __DEBUG__
+            DumpBitrateConfiguration();
+        #endif
     }
 
     void SBC::SBCInitialize()

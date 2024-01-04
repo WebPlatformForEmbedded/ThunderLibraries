@@ -205,7 +205,7 @@ namespace AVDTP {
                             idLabels[static_cast<uint8_t>(_id)],
                             _payload.Length(), _expectedPackets);
 #else
-            return (Core::Format("signal #%d type %d id %d", _label, _type, _id));
+            return (Core::Format("signal #%d type %d id %d", _label, static_cast<uint8_t>(_type), static_cast<uint8_t>(_id)));
 #endif
         }
 
@@ -505,7 +505,7 @@ namespace AVDTP {
         }
 
     protected:
-        virtual void OnSignal(const Signal& request, const ResponseHandler& handler VARIABLE_IS_NOT_USED)
+        virtual void OnSignal(const Signal& request VARIABLE_IS_NOT_USED, const ResponseHandler& handler VARIABLE_IS_NOT_USED)
         {
             TRACE_L1("AVDTP: Unhandled incoming signal %d", request.Id());
         }

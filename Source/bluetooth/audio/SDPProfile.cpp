@@ -262,7 +262,7 @@ namespace SDP {
 
                         payload.Pop(outHandles, currentCount);
 
-                        for (uint16_t i; i < outHandles.size(); i++) {
+                        for (uint16_t i=0; i < outHandles.size(); i++) {
                             TRACE_L5("ServiceRecordHandleList[%d]=0x%08x", i, outHandles[i]);
                         }
 
