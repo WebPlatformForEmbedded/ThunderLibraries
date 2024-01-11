@@ -48,7 +48,7 @@ jobs:
       uses: actions/checkout@v3
       with:
         path: ThunderLibraries
-        repository: ${{github.repository_owner}}/ThunderLibraries
+        repository: WebPlatformForEmbedded/ThunderLibraries
 
     - name: Regex ThunderLibraries
       if: contains(github.event.pull_request.body, '[Options:')
