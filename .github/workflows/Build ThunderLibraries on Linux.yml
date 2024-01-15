@@ -2,13 +2,13 @@ name: Build ThunderLibraries on Linux
 
 on:
   push:
-    # branches: ["main"]
+    branches: ["main"]
   pull_request:
     branches: ["main"]
 
 jobs:
   Thunder:
-    uses: rdkcentral/Thunder/.github/workflows/Build Thunder on Linux.yml@master
+    uses: VeithMetro/Thunder/.github/workflows/Linux build template.yml@development/actions
 
   ThunderLibraries:
     needs: Thunder
