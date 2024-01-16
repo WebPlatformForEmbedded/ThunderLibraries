@@ -8,8 +8,8 @@ on:
 
 jobs:
   Thunder:
-    uses: VeithMetro/Thunder/.github/workflows/Linux build template.yml@development/actions
+    uses: rdkcentral/Thunder/.github/workflows/Linux build template.yml@master
 
   ThunderLibraries:
     needs: Thunder
-    uses: VeithMetro/ThunderLibraries/.github/workflows/Linux build template.yml@development/actions
+    uses: WebPlatformForEmbedded/ThunderLibraries/.github/workflows/Linux build template.yml@main
