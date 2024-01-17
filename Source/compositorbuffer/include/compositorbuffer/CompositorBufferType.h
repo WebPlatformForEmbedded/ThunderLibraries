@@ -68,6 +68,13 @@ namespace Compositor {
             SharedStorage& operator=(const SharedStorage&) = delete;
 
             SharedStorage()
+                : _width(0)
+                , _height(0)
+                , _format(0)
+                , _modifier(0)
+                , _type(Exchange::ICompositionBuffer::TYPE_INVALID)
+                , _dirty()
+                , _copyOfDirty(false)
             {
             }
             SharedStorage(const uint32_t width, const uint32_t height, const uint32_t format, const uint64_t modifier, const Exchange::ICompositionBuffer::DataType type)
