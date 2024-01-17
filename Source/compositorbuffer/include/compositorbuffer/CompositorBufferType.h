@@ -37,14 +37,10 @@ namespace Compositor {
     template <const uint8_t PLANES>
     class CompositorBufferType : public Exchange::ICompositionBuffer, public Core::IResource {
     private:
-// We need to test this on a 32 bit platform. On 64 bits platforms we do need
-// the data to be written into the eventfd to be 64 bits otherwise it does not
-// respond!
-#if defined(__SIZEOF_POINTER__) && (__SIZEOF_POINTER__ == 8)
+        /***
+         * We need a 64bit according: https://github.com/torvalds/linux/blob/v6.1/fs/eventfd.c#L275
+         */
         using EventFrame = uint64_t;
-#else
-        using EventFrame = uint32_t;
-#endif
 
         // We need some shared space for data to exchange, and to create a lock..
         class SharedStorage {
@@ -72,6 +68,13 @@ namespace Compositor {
             SharedStorage& operator=(const SharedStorage&) = delete;
 
             SharedStorage()
+                : _width(0)
+                , _height(0)
+                , _format(0)
+                , _modifier(0)
+                , _type(Exchange::ICompositionBuffer::TYPE_INVALID)
+                , _dirty()
+                , _copyOfDirty(false)
             {
             }
             SharedStorage(const uint32_t width, const uint32_t height, const uint32_t format, const uint64_t modifier, const Exchange::ICompositionBuffer::DataType type)
