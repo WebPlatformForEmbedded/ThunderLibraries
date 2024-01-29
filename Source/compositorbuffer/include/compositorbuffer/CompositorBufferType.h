@@ -67,16 +67,12 @@ namespace Compositor {
             SharedStorage(const SharedStorage&) = delete;
             SharedStorage& operator=(const SharedStorage&) = delete;
 
-            SharedStorage()
-                : _width(0)
-                , _height(0)
-                , _format(0)
-                , _modifier(0)
-                , _type(Exchange::ICompositionBuffer::TYPE_INVALID)
-                , _dirty()
-                , _copyOfDirty(false)
-            {
-            }
+            // FIXME:
+            // Do not initialize members for now, this constructor is called after a mmap in the 
+            // placement new operator above. Initializing them now will reset the original values 
+            // of the buffer metadata. 
+            SharedStorage(){};
+            
             SharedStorage(const uint32_t width, const uint32_t height, const uint32_t format, const uint64_t modifier, const Exchange::ICompositionBuffer::DataType type)
                 : _width(width)
                 , _height(height)
