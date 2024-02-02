@@ -1246,7 +1246,7 @@ uint32_t ManagementSocket::UserPINCodeReply(const Address& remote, const Address
         command->addr.bdaddr = *remote.Data();
         command->addr.type = type;
         command->pin_len = std::min(pinCode.length(), sizeof(command->pin_code));
-        ::memcpy(command->pin_code, pinCode.c_str(), std::min(pinCode.length(), sizeof(command->pin_code)));
+        ::memcpy(command->pin_code, pinCode.c_str(), command->pin_len);
         result = Exchange(MANAGMENT_TIMEOUT, command, command);
         commandResult = command.Result();
     } else {
