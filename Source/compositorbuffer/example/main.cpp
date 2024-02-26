@@ -20,6 +20,7 @@
 
 using namespace WPEFramework;
 
+MODULE_NAME_ARCHIVE_DECLARATION
 namespace Test {
 
 const char* descriptors[] = {
