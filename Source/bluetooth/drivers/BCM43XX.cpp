@@ -271,12 +271,12 @@ namespace Bluetooth {
         uint32_t MACAddress(const uint8_t length, const uint8_t address[])
         {
             uint8_t data[6];
+            ::memset(data, 0, sizeof(data));
             ::memcpy(data, address, std::min(length, static_cast<uint8_t>(sizeof(data))));
-            ::memset(&(data[length]), 0, sizeof(data) - std::min(length, static_cast<uint8_t>(sizeof(data))));
             const uint16_t command = cmd_opcode_pack(OGF_VENDOR_CMD, BCM43XX_WRITE_LOCAL_ADDRESS);
 
             Exchange::Response response(Exchange::COMMAND_PKT, command);
-            uint32_t result = Exchange(Exchange::Request(Exchange::COMMAND_PKT, command, sizeof(data), address), response, 500);
+            uint32_t result = Exchange(Exchange::Request(Exchange::COMMAND_PKT, command, sizeof(data), data), response, 500);
 
             if ((result == Core::ERROR_NONE) && (response[3] != CMD_SUCCESS)) {
                 TRACE_L1("Failed to set the MAC address\n");
