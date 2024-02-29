@@ -34,12 +34,6 @@ option(BLUETOOTH_GATT_SUPPORT "Include GATT support" OFF)
 option(BLUETOOTH_AUDIO_SUPPORT "Include audio sink/source support" OFF)
 
 find_package(Bluez5UtilHeaders REQUIRED)
-find_package(BCM_HOST QUIET)
-find_package(NEXUS QUIET)
-
-if(BCM_HOST_FOUND)
-   set(BCM43XX ON)
-endif()
 
 add_library(${TARGET} SHARED
     HCISocket.cpp
