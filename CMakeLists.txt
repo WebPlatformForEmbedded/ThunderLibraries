@@ -19,7 +19,7 @@
 cmake_minimum_required(VERSION 3.3)
 project(Libraries)
 
-find_package(WPEFramework)
+find_package(Thunder)
 
 if (BUILD_REFERENCE)
     add_definitions (-DBUILD_REFERENCE=${BUILD_REFERENCE})

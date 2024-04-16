@@ -22,7 +22,7 @@
 #include "Module.h"
 #include "IAudioCodec.h"
 
-namespace WPEFramework {
+namespace Thunder {
 
 namespace Bluetooth {
 

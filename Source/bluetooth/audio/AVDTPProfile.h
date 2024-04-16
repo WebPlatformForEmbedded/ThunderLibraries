@@ -22,7 +22,7 @@
 #include "Module.h"
 #include "AVDTPSocket.h"
 
-namespace WPEFramework {
+namespace Thunder {
 
 namespace Bluetooth {
 

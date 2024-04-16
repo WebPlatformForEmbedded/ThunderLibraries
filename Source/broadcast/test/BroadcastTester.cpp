@@ -24,7 +24,7 @@
 #include <core/core.h>
 
 MODULE_NAME_DECLARATION(BUILD_REFERENCE)
-using namespace WPEFramework;
+using namespace Thunder;
 
 void printHelp(){
     printf("Keys to use:\n");
@@ -157,7 +157,7 @@ int main(int /* argc */, const char** /* argv */)
     } while (keyPress != 'Q');
 
     // Clear the factory we created..
-    WPEFramework::Core::Singleton::Dispose();
+    Thunder::Core::Singleton::Dispose();
 
     printf("\nLeaving the test App !!!\n");
 

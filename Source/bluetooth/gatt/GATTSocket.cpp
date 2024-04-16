@@ -19,7 +19,7 @@
 
 #include "GATTSocket.h"
 
-namespace WPEFramework {
+namespace Thunder {
 
 namespace Bluetooth {
 
@@ -353,4 +353,4 @@ bool GATTSocket::Security(const uint8_t level)
 
 } // namespace Bluetooth
 
-} // namespace WPEFramework
+} // namespace Thunder

@@ -19,7 +19,7 @@
 
 #include "ProgramTable.h"
 
-namespace WPEFramework {
+namespace Thunder {
 
 namespace Broadcast {
 
@@ -99,4 +99,4 @@ namespace Broadcast {
     }
 
 } // namespace Broadcast
-} // namespace WPEFramework
+} // namespace Thunder

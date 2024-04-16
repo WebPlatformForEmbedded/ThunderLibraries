@@ -21,7 +21,7 @@
 #include <HCISocket.h>
 #include <IDriver.h>
 
-namespace WPEFramework {
+namespace Thunder {
 
 namespace Bluetooth {
 
@@ -372,22 +372,22 @@ namespace Bluetooth {
         uint32_t _baudRate;
     };
 }
-} // namespace WPEFramework::Bluetooth
+} // namespace Thunder::Bluetooth
 
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-WPEFramework::Bluetooth::Broadcom43XX* g_driver = nullptr;
+Thunder::Bluetooth::Broadcom43XX* g_driver = nullptr;
 
 const char* construct_bluetooth_driver(const char* input) {
     const char* result = "Driver already loaded.";
     
     if (g_driver == nullptr) {
-        WPEFramework::Bluetooth::Broadcom43XX::Config config;
+        Thunder::Bluetooth::Broadcom43XX::Config config;
         config.FromString(input);
-        WPEFramework::Bluetooth::Broadcom43XX* driver = new WPEFramework::Bluetooth::Broadcom43XX(config);
+        Thunder::Bluetooth::Broadcom43XX* driver = new Thunder::Bluetooth::Broadcom43XX(config);
 
 
         result = driver->Initialize();

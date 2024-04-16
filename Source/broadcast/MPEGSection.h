@@ -33,7 +33,7 @@
 
 // ---- Class Definition ----
 
-namespace WPEFramework {
+namespace Thunder {
 namespace Broadcast {
     namespace MPEG {
         class EXTERNAL Section {
@@ -278,6 +278,6 @@ namespace Broadcast {
 
     } // namespace MPEG
 } // namespace Broadcast
-} // namespace WPEFramework
+} // namespace Thunder
 
 #endif // __MPEGSECTION_H

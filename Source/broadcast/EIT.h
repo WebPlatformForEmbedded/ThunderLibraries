@@ -35,7 +35,7 @@
 
 // ---- Class Definition ----
 
-namespace WPEFramework {
+namespace Thunder {
 namespace Broadcast {
     namespace DVB {
 
@@ -198,6 +198,6 @@ namespace Broadcast {
 
     } // namespace DVB
 } // namespace Broadcast
-} // namespace WPEFramework
+} // namespace Thunder
 
 #endif // DVB_EIT_TABLE_H

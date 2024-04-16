@@ -22,7 +22,7 @@
 #include "Module.h"
 #include "GATTSocket.h"
 
-namespace WPEFramework {
+namespace Thunder {
 
 namespace Bluetooth {
 
@@ -879,5 +879,5 @@ namespace Bluetooth {
 
 } // namespace Bluetooth
 
-} // namespace WPEFramework
+} // namespace Thunder
 

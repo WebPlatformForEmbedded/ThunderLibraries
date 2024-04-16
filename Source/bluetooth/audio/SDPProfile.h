@@ -25,7 +25,7 @@
 #include <set>
 
 
-namespace WPEFramework {
+namespace Thunder {
 
 namespace Bluetooth {
 

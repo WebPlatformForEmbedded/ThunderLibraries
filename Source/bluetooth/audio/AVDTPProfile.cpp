@@ -20,7 +20,7 @@
 #include "Module.h"
 #include "AVDTPProfile.h"
 
-namespace WPEFramework {
+namespace Thunder {
 
 namespace Bluetooth {
 

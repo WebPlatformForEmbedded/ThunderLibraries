@@ -19,7 +19,7 @@
 
 #include "HCISocket.h"
 
-namespace WPEFramework {
+namespace Thunder {
 
 ENUM_CONVERSION_BEGIN(Bluetooth::Address::type)
     { Bluetooth::Address::BREDR_ADDRESS, _TXT(_T("bredr")) },

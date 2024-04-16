@@ -19,7 +19,7 @@
 
 #include "Module.h"
 
-namespace WPEFramework {
+namespace Thunder {
 
 namespace Bluetooth {
 
@@ -113,5 +113,5 @@ namespace Bluetooth {
         return (pos->text != nullptr ? pos->text : _T("reserved"));
     }
 
-} } // namespace WPEFramework::Bluetooth
+} } // namespace Thunder::Bluetooth
 
