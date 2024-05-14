@@ -16,7 +16,7 @@ jobs:
     name: Build type - ${{matrix.build_type}}
     steps:
     - name: Install necessary packages
-      uses: nick-fields/retry@v2
+      uses: nick-fields/retry@v3
       with:
         timeout_minutes: 10
         max_attempts: 10
@@ -41,7 +41,7 @@ jobs:
 
 # ----- Regex & checkout -----
     - name: Checkout ThunderLibraries
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         path: ThunderLibraries
         repository: WebPlatformForEmbedded/ThunderLibraries
