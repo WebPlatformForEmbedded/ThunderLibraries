@@ -84,7 +84,7 @@ target_link_libraries(
 # Installs the ASSystemService daemon
 install(
         TARGETS ASSystemService
-        RUNTIME DESTINATION bin
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
         )
 
 # Install the Service dependencies JSON file

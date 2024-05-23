@@ -85,12 +85,12 @@ endif()
 
 install(
     TARGETS ${TARGET}  EXPORT ${TARGET}Targets  # for downstream dependencies
-    ARCHIVE DESTINATION lib COMPONENT libs      # static lib
-    LIBRARY DESTINATION lib COMPONENT libs      # shared lib
-    RUNTIME DESTINATION bin COMPONENT libs      # binaries
-    FRAMEWORK DESTINATION bin COMPONENT libs    # for mac
-    PUBLIC_HEADER DESTINATION include/${NAMESPACE}/bluetooth/gatt COMPONENT devel
-    INCLUDES DESTINATION include/${NAMESPACE}   # default include path
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT libs      # static lib
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT libs      # shared lib
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT libs      # binaries
+    FRAMEWORK DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT libs    # for mac
+    PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${NAMESPACE}/bluetooth/gatt COMPONENT devel
+    INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${NAMESPACE}   # default include path
 )
 
 InstallPackageConfig(
