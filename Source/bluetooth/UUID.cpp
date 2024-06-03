@@ -19,7 +19,7 @@
 
 #include "UUID.h"
 
-namespace WPEFramework {
+namespace Thunder {
 
 namespace Bluetooth {
 

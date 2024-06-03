@@ -19,7 +19,7 @@
 
 #include "GATTProfile.h"
 
-namespace WPEFramework {
+namespace Thunder {
 
 ENUM_CONVERSION_BEGIN(Bluetooth::GATTProfile::Service::Characteristic::Descriptor::type)
 
@@ -322,5 +322,5 @@ ENUM_CONVERSION_BEGIN(Bluetooth::GATTProfile::Service::type)
 
 ENUM_CONVERSION_END(Bluetooth::GATTProfile::Service::type)
 
-} // namespace WPEFramework
+} // namespace Thunder
 

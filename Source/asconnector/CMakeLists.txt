@@ -16,8 +16,8 @@ find_package( systemd REQUIRED )
 find_package( udev REQUIRED )
 
 Find Library for Tracing and JSON
-find_package(WPEFramework REQUIRED)
-find_package(WPEFrameworkMessaging REQUIRED)
+find_package(Thunder REQUIRED)
+find_package(ThunderMessaging REQUIRED)
 
 # We require C++14
 set( CMAKE_CXX_STANDARD 14 )
@@ -62,7 +62,7 @@ add_executable(
 
 target_link_libraries(
 
-        WPEFrameworkProtocols::WPEFrameworkProtocols
+        ThunderProtocols::ThunderProtocols
 
         ${SYSTEMD_LIBRARIES}
 

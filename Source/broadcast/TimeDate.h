@@ -24,7 +24,7 @@
 #include "Descriptors.h"
 #include "TDT.h"
 
-namespace WPEFramework {
+namespace Thunder {
 
 namespace Broadcast {
 
@@ -222,6 +222,6 @@ namespace Broadcast {
     };
 
 } // namespace Broadcast
-} // namespace WPEFramework
+} // namespace Thunder
 
 #endif // TIMEDATE_ADMINISTRATOR_H

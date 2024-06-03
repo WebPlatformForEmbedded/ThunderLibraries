@@ -23,7 +23,7 @@
 #include "Definitions.h"
 #include "MPEGTable.h"
 
-namespace WPEFramework {
+namespace Thunder {
 
 namespace Broadcast {
 
@@ -187,6 +187,6 @@ namespace Broadcast {
     };
 
 } // namespace Broadcast
-} // namespace WPEFramework
+} // namespace Thunder
 
 #endif // TUNER_ADMINISTRATOR_H

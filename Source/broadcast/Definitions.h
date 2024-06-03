@@ -22,7 +22,7 @@
 
 #include "Module.h"
 
-namespace WPEFramework {
+namespace Thunder {
 
 namespace Broadcast {
 
@@ -367,6 +367,6 @@ namespace Broadcast {
     };
 
 } // namespace Broadcast
-} // namespace WPEFramework
+} // namespace Thunder
 
 #endif // __BROADCAST_DEFINITIONS_H

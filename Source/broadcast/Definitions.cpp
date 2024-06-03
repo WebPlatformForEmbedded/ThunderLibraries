@@ -19,7 +19,7 @@
 
 #include "Definitions.h"
 
-namespace WPEFramework {
+namespace Thunder {
 
 ENUM_CONVERSION_BEGIN(Broadcast::ITuner::DTVStandard)
     { Broadcast::ITuner::DVB, _TXT("DVB") },
@@ -71,4 +71,4 @@ ENUM_CONVERSION_BEGIN(Broadcast::Modulation)
     { Broadcast::QAM4096, _TXT("QAM4096") },
 ENUM_CONVERSION_END(Broadcast::Modulation)
 
-} // namespace WPEFramework
+} // namespace Thunder

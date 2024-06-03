@@ -23,7 +23,7 @@
 #include "Definitions.h"
 #include "MPEGDescriptor.h"
 
-namespace WPEFramework {
+namespace Thunder {
 namespace Broadcast {
     namespace DVB {
         namespace Descriptors {
@@ -224,6 +224,6 @@ namespace Broadcast {
         }
     }
 }
-} // namespace WPEFramework::Broadcast::DVB::Descriptors
+} // namespace Thunder::Broadcast::DVB::Descriptors
 
 #endif // DESCRIPTORS_H

@@ -21,7 +21,7 @@
 
 #include "Module.h"
 
-namespace WPEFramework {
+namespace Thunder {
 
 namespace Bluetooth {
 
@@ -58,4 +58,4 @@ inline void BtUtilsHciFilterSetPtype(int t, struct hci_filter *f)
 
 } // namespace Bluetooth
 
-} // namespace WPEFramework
+} // namespace Thunder

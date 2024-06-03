@@ -22,7 +22,7 @@
 #include "SDPSocket.h"
 #include "SDPProfile.h"
 
-namespace WPEFramework {
+namespace Thunder {
 
 ENUM_CONVERSION_BEGIN(Bluetooth::SDP::ClassID::id)
     { Bluetooth::SDP::ClassID::Undefined,   _TXT("(undefined)") },
