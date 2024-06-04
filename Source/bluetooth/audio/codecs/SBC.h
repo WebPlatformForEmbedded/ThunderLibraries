@@ -23,7 +23,7 @@
 #include "../IAudioCodec.h"
 #include "../DataRecord.h"
 
-namespace WPEFramework {
+namespace Thunder {
 
 namespace Bluetooth {
 

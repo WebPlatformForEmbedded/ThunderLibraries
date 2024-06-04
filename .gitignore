@@ -19,8 +19,8 @@ install_manifest.txt
 Makefile
 */*/Makefile
 */*/*/Makefile
-*/*/WPEFramework*Config.cmake
-*/*/WPEFramework*ConfigVersion.cmake
+*/*/Thunder*Config.cmake
+*/*/Thunder*ConfigVersion.cmake
 *.pc
 *.so.*
 *.so

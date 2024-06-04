@@ -24,7 +24,7 @@
 #include "Descriptors.h"
 #include "SDT.h"
 
-namespace WPEFramework {
+namespace Thunder {
 
 namespace Broadcast {
 
@@ -324,6 +324,6 @@ namespace Broadcast {
     };
 
 } // namespace Broadcast
-} // namespace WPEFramework
+} // namespace Thunder
 
 #endif // SERVICE_ADMINISTRATOR_H

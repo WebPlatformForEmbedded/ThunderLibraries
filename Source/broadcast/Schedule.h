@@ -24,7 +24,7 @@
 #include "Descriptors.h"
 #include "EIT.h"
 
-namespace WPEFramework {
+namespace Thunder {
 
 namespace Broadcast {
 
@@ -213,6 +213,6 @@ namespace Broadcast {
     };
 
 } // namespace Broadcast
-} // namespace WPEFramework
+} // namespace Thunder
 
 #endif // SCHEDULE_ADMINISTRATOR_H

@@ -19,7 +19,7 @@
 
 #include "../Module.h"
 
-namespace WPEFramework {
+namespace Thunder {
 
 namespace Bluetooth {
 
@@ -53,7 +53,7 @@ namespace Bluetooth {
     public:
         //
         // Exchange holds a definitions of a request and a response for the communication with the
-        // HCI. See WPEFramework/Source/core/StreamTypeKeyValue.h for more details.
+        // HCI. See Thunder/Source/core/StreamTypeKeyValue.h for more details.
         //
         struct Exchange {
 
@@ -471,4 +471,4 @@ namespace Bluetooth {
         Core::SerialPort::FlowControl _flowControl;
     };
 }
-} // namespace WPEFramework::Bluetooth
+} // namespace Thunder::Bluetooth

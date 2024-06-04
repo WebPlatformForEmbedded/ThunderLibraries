@@ -19,7 +19,7 @@
 
 #include "BluetoothUtils.h"
 
-namespace WPEFramework {
+namespace Thunder {
 
 namespace Bluetooth {
 
@@ -215,4 +215,4 @@ void BtUtilsBaswap(bdaddr_t* dst, const bdaddr_t* src)
 
 } // namespace Bluetooth
 
-} // namespace WPEFramework
+} // namespace Thunder

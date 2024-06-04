@@ -17,7 +17,7 @@
 
 cmake_minimum_required(VERSION 3.3)
 
-find_package(WPEFramework)
+find_package(Thunder)
 find_package(${NAMESPACE}Core REQUIRED)
 find_package(${NAMESPACE}Messaging REQUIRED)
 find_package(CompileSettingsDebug CONFIG REQUIRED)
@@ -106,12 +106,12 @@ endif()
 
 install(
     TARGETS ${TARGET}  EXPORT ${TARGET}Targets  # for downstream dependencies
-    ARCHIVE DESTINATION lib COMPONENT libs      # static lib
-    LIBRARY DESTINATION lib COMPONENT libs      # shared lib
-    RUNTIME DESTINATION bin COMPONENT libs      # binaries
-    FRAMEWORK DESTINATION bin COMPONENT libs    # for mac
-    PUBLIC_HEADER DESTINATION include/${NAMESPACE}/bluetooth COMPONENT devel   # headers for mac (note the different component -> different package)
-    INCLUDES DESTINATION include/${NAMESPACE}   # default include path
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT libs      # static lib
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT libs      # shared lib
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT libs      # binaries
+    FRAMEWORK DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT libs    # for mac
+    PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${NAMESPACE}/bluetooth COMPONENT devel   # headers for mac (note the different component -> different package)
+    INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${NAMESPACE}   # default include path
 )
 
 InstallPackageConfig(

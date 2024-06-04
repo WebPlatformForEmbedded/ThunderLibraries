@@ -35,11 +35,11 @@
 // --------------------------------------------------------------------
 // SOURCE: https://linuxtv.org/downloads/v4l-dvb-apis/uapi/dvb
 // --------------------------------------------------------------------
-namespace WPEFramework {
+namespace Thunder {
 namespace Broadcast {
 
     struct conversion_entry {
-        int from; // WPEFramework Broadcast/ITuner value
+        int from; // Thunder Broadcast/ITuner value
         int to; // LinuxDVB API value
     };
 
@@ -838,4 +838,4 @@ POP_WARNING()
     }
 
 } // namespace Broadcast
-} // namespace WPEFramework
+} // namespace Thunder

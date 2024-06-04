@@ -23,7 +23,7 @@
 #include "UUID.h"
 #include "BluetoothUtils.h"
 
-namespace WPEFramework {
+namespace Thunder {
 
 namespace Bluetooth {
 
@@ -1308,4 +1308,4 @@ POP_WARNING()
 
 } // namespace Bluetooth
 
-} // namespace WPEFramework
+} // namespace Thunder

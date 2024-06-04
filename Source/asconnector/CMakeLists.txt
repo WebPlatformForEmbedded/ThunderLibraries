@@ -16,8 +16,8 @@ find_package( systemd REQUIRED )
 find_package( udev REQUIRED )
 
 Find Library for Tracing and JSON
-find_package(WPEFramework REQUIRED)
-find_package(WPEFrameworkMessaging REQUIRED)
+find_package(Thunder REQUIRED)
+find_package(ThunderMessaging REQUIRED)
 
 # We require C++14
 set( CMAKE_CXX_STANDARD 14 )
@@ -62,7 +62,7 @@ add_executable(
 
 target_link_libraries(
 
-        WPEFrameworkProtocols::WPEFrameworkProtocols
+        ThunderProtocols::ThunderProtocols
 
         ${SYSTEMD_LIBRARIES}
 
@@ -84,7 +84,7 @@ target_link_libraries(
 # Installs the ASSystemService daemon
 install(
         TARGETS ASSystemService
-        RUNTIME DESTINATION bin
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
         )
 
 # Install the Service dependencies JSON file

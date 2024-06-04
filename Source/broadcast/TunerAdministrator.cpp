@@ -19,7 +19,7 @@
 
 #include "TunerAdministrator.h"
 
-namespace WPEFramework {
+namespace Thunder {
 
 namespace Broadcast {
 
@@ -41,4 +41,4 @@ namespace Broadcast {
     }
 
 }
-} // namespace WPEFramework::Broadcast
+} // namespace Thunder::Broadcast

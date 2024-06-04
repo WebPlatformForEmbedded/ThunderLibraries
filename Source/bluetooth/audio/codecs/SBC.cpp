@@ -23,7 +23,7 @@
 
 #include <sbc/sbc.h>
 
-namespace WPEFramework {
+namespace Thunder {
 
 ENUM_CONVERSION_BEGIN(Bluetooth::A2DP::SBC::preset)
     { Bluetooth::A2DP::SBC::COMPATIBLE, _TXT("Compatible") },
