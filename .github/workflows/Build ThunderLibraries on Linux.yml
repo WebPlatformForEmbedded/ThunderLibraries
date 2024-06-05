@@ -3,14 +3,14 @@ name: Build ThunderLibraries on Linux
 on:
   workflow_dispatch:
   push:
-    # branches: ["main"]
+    branches: ["main"]
   pull_request:
     branches: ["main"]
 
 jobs:
   Thunder:
-    uses: rdkcentral/Thunder/.github/workflows/Linux build template.yml@development/actions-checkouts
+    uses: rdkcentral/Thunder/.github/workflows/Linux build template.yml@master
 
   ThunderLibraries:
     needs: Thunder
-    uses: WebPlatformForEmbedded/ThunderLibraries/.github/workflows/Linux build template.yml@development/actions-checkouts # change back to main
+    uses: WebPlatformForEmbedded/ThunderLibraries/.github/workflows/Linux build template.yml@main
