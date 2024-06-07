@@ -60,7 +60,7 @@ target_link_libraries(${TARGET}
         CompileSettingsDebug::CompileSettingsDebug
         ${NAMESPACE}Core::${NAMESPACE}Core
         ${NAMESPACE}Messaging::${NAMESPACE}Messaging
-        ${SBC_LIBRARIES}
+        SBC::SBC
 )
 
 set_target_properties(${TARGET}
