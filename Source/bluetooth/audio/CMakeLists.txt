@@ -15,15 +15,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-cmake_minimum_required(VERSION 3.3)
+cmake_minimum_required(VERSION 3.15)
 
 find_package(Thunder)
 find_package(${NAMESPACE}Core REQUIRED)
 find_package(${NAMESPACE}Messaging REQUIRED)
 find_package(CompileSettingsDebug CONFIG REQUIRED)
 
-project(${NAMESPACE}BluetoothAudio)
-project_version(1.0.0)
+project(${NAMESPACE}BluetoothAudio
+        VERSION 1.0.0
+        DESCRIPTION "Bluetooth audio library"
+        LANGUAGES CXX)
+
 set(TARGET ${PROJECT_NAME})
 message("Setup ${TARGET} v${PROJECT_VERSION}")
 
@@ -46,7 +49,7 @@ set(PUBLIC_HEADERS
     bluetooth_audio.h
 )
 
-add_library(${TARGET} SHARED
+add_library(${TARGET}
     SDPSocket.cpp
     SDPProfile.cpp
     AVDTPSocket.cpp
@@ -60,7 +63,7 @@ target_link_libraries(${TARGET}
         CompileSettingsDebug::CompileSettingsDebug
         ${NAMESPACE}Core::${NAMESPACE}Core
         ${NAMESPACE}Messaging::${NAMESPACE}Messaging
-        ${SBC_LIBRARIES}
+        SBC::SBC
 )
 
 set_target_properties(${TARGET}
@@ -96,18 +99,18 @@ include(CheckStructHasMember)
 check_struct_has_member("struct mgmt_ltk_info" central "../include/bluetooth/bluetooth.h;../include/bluetooth/mgmt.h" NO_INCLUSIVE_LANGUAGE LANGUAGE C)
 
 if(${NO_INCLUSIVE_LANGUAGE})
-    message(STATUS "Your version of bluez don't uses inclusive language anymore")
+    message(VERBOSE "Your version of bluez don't uses inclusive language anymore")
     target_compile_definitions(${TARGET} PUBLIC NO_INCLUSIVE_LANGUAGE)
 endif()
 
 install(
-    TARGETS ${TARGET}  EXPORT ${TARGET}Targets  # for downstream dependencies
-    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT libs      # static lib
-    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT libs      # shared lib
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT libs      # binaries
-    FRAMEWORK DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT libs    # for mac
-    PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${NAMESPACE}/bluetooth/audio COMPONENT devel
-    INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${NAMESPACE}   # default include path
+    TARGETS ${TARGET}  EXPORT ${TARGET}Targets
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT ${NAMESPACE}_Development
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT ${NAMESPACE}_Runtime NAMELINK_COMPONENT ${NAMESPACE}_Development
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT ${NAMESPACE}_Runtime
+    FRAMEWORK DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT ${NAMESPACE}_Runtime
+    PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${NAMESPACE}/bluetooth/audio COMPONENT ${NAMESPACE}_Development
+    INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${NAMESPACE}
 )
 
 install(
@@ -117,7 +120,7 @@ install(
 
 InstallPackageConfig(
     TARGETS ${TARGET}
-    DESCRIPTION "Bluetooth audio library"
+    DESCRIPTION "${PROJECT_DESCRIPTION}"
 )
 
 InstallCMakeConfig(

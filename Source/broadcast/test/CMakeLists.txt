@@ -26,4 +26,4 @@ target_link_libraries(BroadcastTester
         ${NAMESPACE}Core::${NAMESPACE}Core
 )   
 
-install(TARGETS BroadcastTester DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(TARGETS BroadcastTester DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT ${NAMESPACE}_Test)

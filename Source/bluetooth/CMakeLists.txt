@@ -15,15 +15,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-cmake_minimum_required(VERSION 3.3)
+cmake_minimum_required(VERSION 3.15)
 
 find_package(Thunder)
 find_package(${NAMESPACE}Core REQUIRED)
 find_package(${NAMESPACE}Messaging REQUIRED)
 find_package(CompileSettingsDebug CONFIG REQUIRED)
 
-project(${NAMESPACE}Bluetooth)
-project_version(1.0.0)
+project(${NAMESPACE}Bluetooth
+        VERSION 1.0.0
+        DESCRIPTION "Bluetooth abstraction that communicates directly to a HCI socket"
+        LANGUAGES CXX)
+
 set(TARGET ${PROJECT_NAME})
 message("Setup ${TARGET} v${PROJECT_VERSION}")
 
@@ -35,7 +38,7 @@ option(BLUETOOTH_AUDIO_SUPPORT "Include audio sink/source support" OFF)
 
 find_package(Bluez5UtilHeaders REQUIRED)
 
-add_library(${TARGET} SHARED
+add_library(${TARGET}
     HCISocket.cpp
     UUID.cpp
     Definitions.cpp
@@ -105,13 +108,13 @@ if(${NO_INCLUSIVE_LANGUAGE})
 endif()
 
 install(
-    TARGETS ${TARGET}  EXPORT ${TARGET}Targets  # for downstream dependencies
-    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT libs      # static lib
-    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT libs      # shared lib
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT libs      # binaries
-    FRAMEWORK DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT libs    # for mac
-    PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${NAMESPACE}/bluetooth COMPONENT devel   # headers for mac (note the different component -> different package)
-    INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${NAMESPACE}   # default include path
+    TARGETS ${TARGET}  EXPORT ${TARGET}Targets
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT ${NAMESPACE}_Development
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT ${NAMESPACE}_Runtime NAMELINK_COMPONENT ${NAMESPACE}_Development
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT ${NAMESPACE}_Runtime
+    FRAMEWORK DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT ${NAMESPACE}_Runtime
+    PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${NAMESPACE}/bluetooth COMPONENT ${NAMESPACE}_Development
+    INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${NAMESPACE}
 )
 
 InstallPackageConfig(

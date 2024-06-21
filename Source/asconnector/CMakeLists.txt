@@ -1,6 +1,9 @@
 cmake_minimum_required( VERSION 3.10.3 )
 
-project( asconnector )
+project(asconnector 
+        VERSION 0.0.1
+        DESCRIPTION "AS connector"
+        LANGUAGE CXX)
 
 option( ENABLE_BREAKPAD_MINIDUMP "Enables the support for Google Breakpad minidump" ON )
 
@@ -40,7 +43,7 @@ add_subdirectory( dbus )
 add_subdirectory( asservice )
 
 if ( ENABLE_BREAKPAD_MINIDUMP )
-    message( STATUS "ENABLE_BREAKPAD_MINIDUMP is on" )
+    message(VERBOSE "ENABLE_BREAKPAD_MINIDUMP is on" )
 
     # Find the breakpad library
     find_package( breakpad REQUIRED )

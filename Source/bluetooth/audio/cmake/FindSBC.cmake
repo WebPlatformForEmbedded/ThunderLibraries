@@ -22,10 +22,13 @@
 #  SBC_LIBRARIES - The libraries needed to use libsbc
 
 find_package(PkgConfig)
-pkg_check_modules(SBC REQUIRED sbc)
+pkg_check_modules(SBC REQUIRED sbc IMPORTED_TARGET)
 
 include(FindPackageHandleStandardArgs)
-find_package_handle_standard_args(sbc DEFAULT_MSG SBC_LIBRARIES SBC_INCLUDE_DIRS)
+find_package_handle_standard_args(SBC DEFAULT_MSG SBC_LIBRARIES SBC_INCLUDE_DIRS)
 
 mark_as_advanced(SBC_FOUND SBC_LIBRARIES SBC_INCLUDE_DIRS)
 
+if(SBC_FOUND)
+   add_library(SBC::SBC ALIAS PkgConfig::SBC)
+endif()
