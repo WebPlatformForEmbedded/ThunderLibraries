@@ -43,7 +43,7 @@ add_subdirectory( dbus )
 add_subdirectory( asservice )
 
 if ( ENABLE_BREAKPAD_MINIDUMP )
-    message( STATUS "ENABLE_BREAKPAD_MINIDUMP is on" )
+    message(VERBOSE "ENABLE_BREAKPAD_MINIDUMP is on" )
 
     # Find the breakpad library
     find_package( breakpad REQUIRED )

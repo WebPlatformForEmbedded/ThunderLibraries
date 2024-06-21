@@ -82,7 +82,7 @@ include(CheckStructHasMember)
 check_struct_has_member("struct mgmt_ltk_info" central "../include/bluetooth/bluetooth.h;../include/bluetooth/mgmt.h" NO_INCLUSIVE_LANGUAGE LANGUAGE C)
 
 if(${NO_INCLUSIVE_LANGUAGE})
-    message(STATUS "Your version of bluez don't uses inclusive language anymore")
+    message(VERBOSE "Your version of bluez don't uses inclusive language anymore")
     target_compile_definitions(${TARGET} PUBLIC NO_INCLUSIVE_LANGUAGE)
 endif()
 
