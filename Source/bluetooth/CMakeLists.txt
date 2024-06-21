@@ -35,7 +35,7 @@ option(BLUETOOTH_AUDIO_SUPPORT "Include audio sink/source support" OFF)
 
 find_package(Bluez5UtilHeaders REQUIRED)
 
-add_library(${TARGET} SHARED
+add_library(${TARGET}
     HCISocket.cpp
     UUID.cpp
     Definitions.cpp

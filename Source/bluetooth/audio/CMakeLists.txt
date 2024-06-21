@@ -46,7 +46,7 @@ set(PUBLIC_HEADERS
     bluetooth_audio.h
 )
 
-add_library(${TARGET} SHARED
+add_library(${TARGET}
     SDPSocket.cpp
     SDPProfile.cpp
     AVDTPSocket.cpp

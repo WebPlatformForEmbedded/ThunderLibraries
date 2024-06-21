@@ -34,7 +34,7 @@ set(PUBLIC_HEADERS
     bluetooth_gatt.h
 )
 
-add_library(${TARGET} SHARED
+add_library(${TARGET}
     GATTSocket.cpp
     GATTProfile.cpp
 )
