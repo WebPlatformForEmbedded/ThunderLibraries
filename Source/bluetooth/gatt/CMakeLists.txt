@@ -22,8 +22,11 @@ find_package(${NAMESPACE}Core REQUIRED)
 find_package(${NAMESPACE}Messaging REQUIRED)
 find_package(CompileSettingsDebug CONFIG REQUIRED)
 
-project(${NAMESPACE}BluetoothGATT)
-project_version(1.0.0)
+project(${NAMESPACE}BluetoothGATT
+        VERSION 1.0.0
+        DESCRIPTION "Bluetooth GATT library"
+        LANGUAGES CXX)
+
 set(TARGET ${PROJECT_NAME})
 message("Setup ${TARGET} v${PROJECT_VERSION}")
 
@@ -95,7 +98,7 @@ install(
 
 InstallPackageConfig(
     TARGETS ${TARGET}
-    DESCRIPTION "Bluetooth GATT library"
+    DESCRIPTION "${PROJECT_DESCRIPTION}"
 )
 
 InstallCMakeConfig(

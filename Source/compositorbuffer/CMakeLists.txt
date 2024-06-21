@@ -15,13 +15,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-project(CompositorBufferType LANGUAGES CXX)
-
 cmake_minimum_required(VERSION 3.15)
 
 find_package(Thunder)
 
-project_version(1.0.0)
+project(CompositorBufferType
+        VERSION 1.0.0
+        DESCRIPTION "Abstraction to share graphics/video buffers between different processes"
+        LANGUAGES CXX)
 
 set(MODULE_NAME ${NAMESPACE}${PROJECT_NAME})
 

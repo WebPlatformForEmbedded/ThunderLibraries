@@ -1,6 +1,9 @@
 cmake_minimum_required( VERSION 3.10.3 )
 
-project( asconnector )
+project(asconnector 
+        VERSION 0.0.1
+        DESCRIPTION "AS connector"
+        LANGUAGE CXX)
 
 option( ENABLE_BREAKPAD_MINIDUMP "Enables the support for Google Breakpad minidump" ON )
 

@@ -22,8 +22,11 @@ find_package(${NAMESPACE}Core REQUIRED)
 find_package(${NAMESPACE}Messaging REQUIRED)
 find_package(CompileSettingsDebug CONFIG REQUIRED)
 
-project(${NAMESPACE}BluetoothAudio)
-project_version(1.0.0)
+project(${NAMESPACE}BluetoothAudio
+        VERSION 1.0.0
+        DESCRIPTION "Bluetooth audio library"
+        LANGUAGES CXX)
+
 set(TARGET ${PROJECT_NAME})
 message("Setup ${TARGET} v${PROJECT_VERSION}")
 
@@ -117,7 +120,7 @@ install(
 
 InstallPackageConfig(
     TARGETS ${TARGET}
-    DESCRIPTION "Bluetooth audio library"
+    DESCRIPTION "${PROJECT_DESCRIPTION}"
 )
 
 InstallCMakeConfig(

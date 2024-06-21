@@ -21,8 +21,11 @@ find_package(Thunder)
 find_package(${NAMESPACE}Core REQUIRED)
 find_package(CompileSettingsDebug CONFIG REQUIRED)
 
-project(${NAMESPACE}Broadcast)
-project_version(1.0.0)
+project(${NAMESPACE}Broadcast
+        VERSION 1.0.0
+        DESCRIPTION "Abstraction to parse DVB tables"
+        LANGUAGES CXX)
+
 set(TARGET ${PROJECT_NAME})
 message("Setup ${TARGET} v${PROJECT_VERSION}")
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
@@ -62,7 +65,6 @@ target_link_libraries(${TARGET}
           ${NAMESPACE}Core::${NAMESPACE}Core
         )
 
-
 if(NXCLIENT_FOUND)
     find_package(NEXUS REQUIRED)
 
@@ -89,7 +91,6 @@ else()
     target_sources(${TARGET} PRIVATE Implementation/V4L/Tuner.cpp)
 endif()
 
-
 set_target_properties(${TARGET} PROPERTIES
         CXX_STANDARD 11
         CXX_STANDARD_REQUIRED YES
@@ -110,12 +111,12 @@ target_include_directories( ${TARGET}
 # Install ARTIFACTS:
 # ===========================================================================================
 install(
-        TARGETS ${TARGET}  EXPORT ${TARGET}Targets  # for downstream dependencies
-        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT libs      # static lib
-        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT libs      # shared lib
-        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT libs      # binaries
-        FRAMEWORK DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT libs    # for mac
-        PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${NAMESPACE}/broadcast COMPONENT devel # for mac
+        TARGETS ${TARGET}  EXPORT ${TARGET}Targets
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT ${NAMESPACE}_Development
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT ${NAMESPACE}_Runtime NAMELINK_COMPONENT ${NAMESPACE}_Development
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT ${NAMESPACE}_Runtime
+        FRAMEWORK DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT ${NAMESPACE}_Runtime
+        PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${NAMESPACE}/broadcast COMPONENT ${NAMESPACE}_Development
         INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${NAMESPACE}/broadcast # headers
 )
 
@@ -124,10 +125,9 @@ install(
 # ===========================================================================================
 InstallPackageConfig(
         TARGETS ${TARGET} 
-        DESCRIPTION "Broadcast library" )
+        DESCRIPTION "${PROJECT_DESCRIPTION}" )
 
 InstallCMakeConfig(
         TARGETS ${TARGET})
-
 
 add_subdirectory(test)

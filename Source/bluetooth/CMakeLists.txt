@@ -22,8 +22,11 @@ find_package(${NAMESPACE}Core REQUIRED)
 find_package(${NAMESPACE}Messaging REQUIRED)
 find_package(CompileSettingsDebug CONFIG REQUIRED)
 
-project(${NAMESPACE}Bluetooth)
-project_version(1.0.0)
+project(${NAMESPACE}Bluetooth
+        VERSION 1.0.0
+        DESCRIPTION "Bluetooth abstraction that communicates directly to a HCI socket"
+        LANGUAGES CXX)
+
 set(TARGET ${PROJECT_NAME})
 message("Setup ${TARGET} v${PROJECT_VERSION}")
 
