@@ -1212,7 +1212,7 @@ namespace SDP {
         ClientSocket& _socket;
     }; // class Client
 
-    class Server {
+    class EXTERNAL Server {
         using Handler = ServerSocket::ResponseHandler;
 
     public:

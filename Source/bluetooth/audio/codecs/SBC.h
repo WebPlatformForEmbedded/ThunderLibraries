@@ -29,7 +29,7 @@ namespace Bluetooth {
 
 namespace A2DP {
 
-    class SBC : public IAudioCodec {
+    class EXTERNAL SBC : public IAudioCodec {
     public:
         static constexpr uint8_t CODEC_TYPE = 0x00; // SBC
 
