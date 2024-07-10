@@ -40,6 +40,7 @@ set(PUBLIC_HEADERS
 add_library(${TARGET}
     GATTSocket.cpp
     GATTProfile.cpp
+    Module.cpp
 )
 
 target_link_libraries(${TARGET}
