@@ -498,7 +498,7 @@ namespace AVDTP {
             _type = type;
 
 #ifdef __DEBUG__
-            static const char* labels[] = { "signalling", "transport", "reporting", "recovery" };
+            VARIABLE_IS_NOT_USED static const char* labels[] = { "signalling", "transport", "reporting", "recovery" };
             ASSERT(type < RECOVERY);
             TRACE_L1("AVDTP: Changed channel type to: %s", labels[type]);
 #endif
