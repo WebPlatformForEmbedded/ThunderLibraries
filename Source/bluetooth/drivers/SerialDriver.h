@@ -234,11 +234,12 @@ namespace Bluetooth {
                 Response& operator=(const Response& copy) = delete;
 
             public:
+PUSH_WARNING(DISABLE_WARNING_MAYBE_UNINITIALIZED)
                 inline Response(const command cmd, const uint16_t sequence)
                     : Request(cmd, sequence, _value)
-                    , _value()
                 {
                 }
+POP_WARNING()
                 inline ~Response()
                 {
                 }
