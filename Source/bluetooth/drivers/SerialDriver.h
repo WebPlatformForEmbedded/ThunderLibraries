@@ -236,6 +236,7 @@ namespace Bluetooth {
             public:
                 inline Response(const command cmd, const uint16_t sequence)
                     : Request(cmd, sequence, _value)
+                    , _value()
                 {
                 }
                 inline ~Response()
