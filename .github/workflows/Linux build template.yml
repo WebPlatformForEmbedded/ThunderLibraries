@@ -1,4 +1,4 @@
-name: Build ThunderLibraries on Linux
+name: Linux build template
 
 on:
   workflow_call:
