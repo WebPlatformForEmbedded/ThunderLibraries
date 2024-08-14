@@ -15,16 +15,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-option(BLUETOOTH
-        "Include the bluetooth library." OFF)
-option(BROADCAST
-        "Include the broadcasting library." OFF)
+option(ASCONNECTOR
+        "Include the asconnector library." OFF)
 
-if(BLUETOOTH)
-    add_subdirectory(bluetooth)
-endif()
-
-if(BROADCAST)
-    add_subdirectory(broadcast)
+if(ASCONNECTOR)
+    add_subdirectory(asconnector)
 endif()
 
