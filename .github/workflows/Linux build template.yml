@@ -66,9 +66,8 @@ jobs:
         -DCMAKE_C_FLAGS="-Wall -Wextra -Wpedantic -Werror -m${{matrix.architecture}}" \
         -DCMAKE_INSTALL_PREFIX="${{matrix.build_type}}/install/usr" \
         -DCMAKE_MODULE_PATH="${PWD}/${{matrix.build_type}}/install/usr/include/WPEFramework/Modules" \
-        -DBROADCAST=ON \
         ${{steps.libs.outputs.first_match}}
-        cmake --build ${{matrix.build_type}}/build/ThunderLibraries --target install
+#       cmake --build ${{matrix.build_type}}/build/ThunderLibraries --target install
 
     - name: Tar files
       run: tar -czvf ${{matrix.build_type}}${{matrix.architecture == '32' && '_x86' || ''}}.tar.gz ${{matrix.build_type}}
