@@ -9,7 +9,7 @@ on:
 
 jobs:
   Thunder:
-    uses: rdkcentral/Thunder/.github/workflows/Linux build template.yml@development/actions-ubuntu-latest
+    uses: rdkcentral/Thunder/.github/workflows/Linux build template.yml@master
 
   ThunderLibraries:
     needs: Thunder
