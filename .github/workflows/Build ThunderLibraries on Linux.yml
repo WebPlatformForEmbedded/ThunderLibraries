@@ -9,8 +9,8 @@ on:
 
 jobs:
   Thunder:
-    uses: rdkcentral/Thunder/.github/workflows/Linux build template.yml@master
+    uses: rdkcentral/Thunder/.github/workflows/Linux build template.yml@development/actions-error
 
   ThunderLibraries:
     needs: Thunder
-    uses: WebPlatformForEmbedded/ThunderLibraries/.github/workflows/Linux build template.yml@main
+    uses: WebPlatformForEmbedded/ThunderLibraries/.github/workflows/Linux build template.yml@development/actions-error
