@@ -15,21 +15,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-option(ASCONNECTOR
-        "Include the asconnector library." OFF)
-option(BLUETOOTH
-        "Include bluetooth library in the build." OFF)
-option(BROADCAST
-        "Include broadcasting library in the build." OFF)
+include_directories(${CMAKE_CURRENT_LIST_DIR}/../../broadcast)
+include_directories($<INSTALL_INTERFACE:include/${NAMESPACE}>)
 
-if(ASCONNECTOR)
-    add_subdirectory(asconnector)
-endif()
+add_executable(BroadcastTester
+    Module.cpp
+    BroadcastTester.cpp)
 
-if(BLUETOOTH)
-    add_subdirectory(bluetooth)
-endif()
+target_link_libraries(BroadcastTester 
+    PRIVATE
+        CompileSettingsDebug::CompileSettingsDebug
+        ${NAMESPACE}Core::${NAMESPACE}Core
+        ${NAMESPACE}Broadcast::${NAMESPACE}Broadcast
+)
 
-if(BROADCAST)
-    add_subdirectory(broadcast)
-endif()
+install(TARGETS BroadcastTester DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT ${NAMESPACE}_Test)
