@@ -2,6 +2,11 @@ name: Linux build template
 
 on:
   workflow_call:
+    inputs:
+      thunder_libraries_ref:
+        required: false
+        type: string
+        default: R5_3
 
 jobs:
   ThunderLibraries:
@@ -77,6 +82,7 @@ jobs:
       with:
         path: ThunderLibraries
         repository: WebPlatformForEmbedded/ThunderLibraries
+        ref: ${{ inputs.thunder_libraries_ref }}
 
     - name: Regex ThunderLibraries
       if: contains(github.event.pull_request.body, '[Options:')
